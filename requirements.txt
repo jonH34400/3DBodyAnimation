@@ -1,0 +1,3 @@
+opencv-python
+mediapipe  # or openpose-python-bindings
+numpy

@@ -1,0 +1,3 @@
+/home/jonathan-herwerth/git/3DBodyAnimation/build/CMakeFiles/3DBodyAnimation.dir
+/home/jonathan-herwerth/git/3DBodyAnimation/build/CMakeFiles/edit_cache.dir
+/home/jonathan-herwerth/git/3DBodyAnimation/build/CMakeFiles/rebuild_cache.dir
