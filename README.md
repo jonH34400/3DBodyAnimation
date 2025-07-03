@@ -51,7 +51,8 @@ sudo apt install -y \
     libceres-dev \
     libicu-dev libbz2-dev libboost-all-dev \
     libflann-dev libfreeimage-dev liblz4-dev \
-    nlohmann-json3-dev  
+    nlohmann-json3-dev \
+    libxtl-dev 
 ```
 
 ---
@@ -60,7 +61,7 @@ sudo apt install -y \
 ```bash
 mkdir -p ~/opt && cd ~/opt
 curl -L -o libtorch.zip \
-  "https://download.pytorch.org/libtorch/cu121/libtorch-cxx11-abi-shared-with-deps-2.2.2%2Bcu121.zip"
+  "https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.2.2%2Bcpu.zip"
 unzip libtorch.zip && rm libtorch.zip
 
 # make CMake find it automatically
@@ -131,6 +132,7 @@ These files already have the field names / 1-based face indices SMPLpp expects.
 mkdir build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release -DTorch_DIR=$Torch_DIR ..
 make -j$(nproc)
-./3dsmc  
+./3dba
+./smpl_test  
 ```
 A successful build drops a `test.obj` T-pose.

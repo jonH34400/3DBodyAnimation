@@ -1,23 +1,35 @@
-cmake_minimum_required(VERSION 3.14)
-project(3DBodyAnimation)
+cmake_minimum_required(VERSION 3.15)
+project(3dba LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+# ── header-only xtl ─────────────────────────────────────────────────────
+add_library(xtl INTERFACE)
+target_include_directories(xtl INTERFACE
+    ${CMAKE_SOURCE_DIR}/external/xtl/include)
 
-find_package(OpenCV REQUIRED)
-find_package(Ceres REQUIRED)
+# ── header-only xtensor (depends on xtl) ────────────────────────────────
+set(XTENSOR_INC ${CMAKE_SOURCE_DIR}/external/xtensor/include)
+add_library(xtensor INTERFACE)
+target_include_directories(xtensor INTERFACE ${XTENSOR_INC})
+target_link_libraries(xtensor INTERFACE xtl)
+set(xtensor_INCLUDE_DIRS ${XTENSOR_INC})         # for legacy CMake in SMPLpp
 
-include_directories(${OpenCV_INCLUDE_DIRS})
-include_directories(${CERES_INCLUDE_DIRS})
-include_directories(src)
+# ── SMPLpp library (uses our xtensor target) ────────────────────────────
+add_subdirectory(external/SMPLpp)
 
-add_executable(3DBodyAnimation
+# ── optimisation pipeline executable ────────────────────────────────────
+add_executable(3dba
     src/main.cpp
-    src/optimizer.cpp
-    src/smpl_model.cpp
-    src/visualizer.cpp
 )
+target_link_libraries(3dba
+    PRIVATE smplpp torch xtensor
+)
+target_compile_features(3dba PRIVATE cxx_std_17)
 
-target_link_libraries(3DBodyAnimation
-    ${OpenCV_LIBS}
-    ${CERES_LIBRARIES}
+# ── smoke-test executable ───────────────────────────────────────────────
+add_executable(smpl_test
+    tests/test_smpl_neutral.cpp
 )
+target_link_libraries(smpl_test
+    PRIVATE smplpp torch xtensor
+)
+target_compile_features(smpl_test PRIVATE cxx_std_17)
