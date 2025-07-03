@@ -52,6 +52,7 @@ sudo apt install -y \
     libceres-dev \
     libicu-dev libbz2-dev libboost-all-dev \
     libflann-dev libfreeimage-dev liblz4-dev \
+    libopencv-dev \
     nlohmann-json3-dev 
 ```
 
@@ -69,11 +70,6 @@ echo 'export Torch_DIR=$HOME/opt/libtorch' >> ~/.bashrc
 echo 'export CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH:$Torch_DIR' >> ~/.bashrc
 source ~/.bashrc   # reload variables in this shell
 ```
-
-> **Why libtorch and not Conda?**  
-> SMPLpp is pure-C++; the libtorch zip ships the C++ headers & shared libs that CMake can detect. Conda installs the Python wheel—hard to link from C++.
-
-
 
 ### 4  Clone project & pull sub-modules
 The repo already lists external dependencies in **.gitmodules** (`external/SMPLpp`, `external/xtensor`). One command fetches everything:
