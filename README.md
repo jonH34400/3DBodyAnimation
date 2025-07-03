@@ -84,7 +84,49 @@ cd 3DBodyAnimation
 
 ---
 
-### 5  Build & run
+
+## Model assets — SMPL models (download **or** reproduce)
+
+### 1  Quick start – pull the pre-processed assets via **Git LFS**
+
+You can get the ready-to-use `.npz` files in **`assets/models/`**:
+
+```bash
+git lfs pull
+```
+
+That downloads:
+
+```
+assets/models/
+│
+├── smpl_female.npz
+└── smpl_male.npz
+```
+
+These files already have the field names / 1-based face indices SMPLpp expects.
+
+---
+
+### 2 Reproduce the preprocessed model `.npz` files yourself
+
+1. Create a free account at **<http://smpl.is.tue.mpg.de>**  
+2. Download one or more raw models:  
+   * `basicModel_f_lbs_10_207_0_v1.0.0.npz`  – female  
+   * `basicModel_m_lbs_10_207_0_v1.0.0.npz`  – male  
+   * `SMPL_NEUTRAL.pkl`                       – gender-neutral  
+3. Place the files under **`assets/raw/`**
+4. Convert each file with helper script:
+
+   ```bash
+   python scripts/convert_smplpp.py \
+     --input  assets/raw/basicModel_f_lbs_10_207_0_v1.0.0.pkl \
+     --output assets/models/smpl_female.npz
+   ```
+
+---
+
+## Build & run
 ```bash
 mkdir build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release -DTorch_DIR=$Torch_DIR ..
@@ -92,4 +134,3 @@ make -j$(nproc)
 ./3dsmc  
 ```
 A successful build drops a `test.obj` T-pose.
-
