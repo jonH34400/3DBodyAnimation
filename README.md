@@ -75,7 +75,7 @@ source ~/.bashrc   # reload variables in this shell
 The repo already lists external dependencies in **.gitmodules** (`external/SMPLpp`, `external/xtensor`). One command fetches everything:
 
 ```bash
-git clone --recursive git@github.com:jonH34400/3DBodyAnimation.git
+git clone --recursive https://github.com/jonH34400/3DBodyAnimation.git
 cd 3DBodyAnimation
 ```
 
