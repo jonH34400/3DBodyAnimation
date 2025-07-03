@@ -1,6 +1,6 @@
 [submodule "external/SMPLpp"]
 	path = external/SMPLpp
-	url = https://github.com/chongyi-zheng/SMPLpp.git
+	url = https://github.com/dengamusic/SMPLpp.git
 [submodule "external/xtensor"]
 	path = external/xtensor
 	url = https://github.com/xtensor-stack/xtensor.git

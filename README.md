@@ -33,6 +33,8 @@ The key component is an optimization loop using **Ceres Solver** to fit SMPL mod
     pip install -r requirements.txt
 
 
+---
+
 ## Local Setup (WSL 2)
 
 ### 1 Core build toolchain
@@ -41,7 +43,6 @@ sudo apt update && sudo apt upgrade -y
 sudo apt install -y build-essential cmake gdb pkg-config autotools-dev
 ```
 
----
 
 ### 2 Third-party libraries (apt)
 ```bash
@@ -51,11 +52,10 @@ sudo apt install -y \
     libceres-dev \
     libicu-dev libbz2-dev libboost-all-dev \
     libflann-dev libfreeimage-dev liblz4-dev \
-    nlohmann-json3-dev \
-    libxtl-dev 
+    nlohmann-json3-dev 
 ```
 
----
+
 
 ### 3  Install **libtorch** (C++ PyTorch)
 ```bash
@@ -73,7 +73,7 @@ source ~/.bashrc   # reload variables in this shell
 > **Why libtorch and not Conda?**  
 > SMPLpp is pure-C++; the libtorch zip ships the C++ headers & shared libs that CMake can detect. Conda installs the Python wheel—hard to link from C++.
 
----
+
 
 ### 4  Clone project & pull sub-modules
 The repo already lists external dependencies in **.gitmodules** (`external/SMPLpp`, `external/xtensor`). One command fetches everything:
@@ -83,7 +83,7 @@ git clone --recursive git@github.com:jonH34400/3DBodyAnimation.git
 cd 3DBodyAnimation
 ```
 
----
+
 
 
 ## Model assets — SMPL models (download **or** reproduce)
@@ -107,9 +107,9 @@ assets/models/
 
 These files already have the field names / 1-based face indices SMPLpp expects.
 
----
 
-### 2 Reproduce the preprocessed model `.npz` files yourself
+
+### 2 (Alternatively) Reproduce the preprocessed model `.npz` files yourself
 
 1. Create a free account at **<http://smpl.is.tue.mpg.de>**  
 2. Download one or more raw models:  
