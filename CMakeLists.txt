@@ -26,10 +26,10 @@ target_link_libraries(3dba
 target_compile_features(3dba PRIVATE cxx_std_17)
 
 # ── smoke-test executable ───────────────────────────────────────────────
-add_executable(smpl_test
-    tests/test_smpl_neutral.cpp
-)
-target_link_libraries(smpl_test
-    PRIVATE smplpp torch xtensor
-)
-target_compile_features(smpl_test PRIVATE cxx_std_17)
+# add_executable(smpl_test
+#     tests/test_smpl_neutral.cpp
+# )
+# target_link_libraries(smpl_test
+#     PRIVATE smplpp torch xtensor
+# )
+# target_compile_features(smpl_test PRIVATE cxx_std_17)

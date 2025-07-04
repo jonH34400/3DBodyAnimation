@@ -62,7 +62,7 @@ sudo apt install -y \
 ```bash
 mkdir -p ~/opt && cd ~/opt
 curl -L -o libtorch.zip \
-  "https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.2.2%2Bcpu.zip"
+  "https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-without-deps-2.1.2%2Bcpu.zip"
 unzip libtorch.zip && rm libtorch.zip
 
 # make CMake find it automatically
@@ -77,6 +77,7 @@ The repo already lists external dependencies in **.gitmodules** (`external/SMPLp
 ```bash
 git clone --recursive https://github.com/jonH34400/3DBodyAnimation.git
 cd 3DBodyAnimation
+git submodule update --init --recursive
 ```
 
 
@@ -126,8 +127,12 @@ These files already have the field names / 1-based face indices SMPLpp expects.
 ## Build & run
 ```bash
 mkdir build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release -DTorch_DIR=$Torch_DIR ..
-make -j$(nproc)
+# cmake -DCMAKE_BUILD_TYPE=Release -DTorch_DIR=$Torch_DIR ..
+# make -j$(nproc)
+# cmake -S . -B build -DCMAKE_PREFIX_PATH="$LIBTORCH_DIR"
+# cmake --build build -j8
+cmake ..
+make -j8
 ./3dba
 ./smpl_test  
 ```
