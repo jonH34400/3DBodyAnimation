@@ -7,7 +7,7 @@
 #include <memory>
 
 #include <Eigen/Dense>          // SMPLpp exposes Eigen-compatible getters
-#include <SMPLpp/SMPL.h>        // adjust include path if your project layout differs
+#include <smpl/SMPL.h>        // adjust include path if your project layout differs
 
 int main(int argc, char** argv)
 {
