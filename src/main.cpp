@@ -16,7 +16,6 @@ int main(int argc, char** argv)
     {
         /* ---------- 2. build & load model ---------- */
         smpl::SMPL smpl;
-        smpl.setDevice(dev);
         smpl.setModelPath(model);
         smpl.init();                           // heavy I/O happens here
 
