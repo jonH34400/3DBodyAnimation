@@ -1,48 +1,50 @@
-// main.cpp  ─ minimal neutral-pose demo for SMPLpp
-// g++ -std=c++17 main.cpp -o neutral_demo  $(pkg-config --cflags --libs xtensor) \
-//     -I/path/to/SMPLpp/include  -L/path/to/SMPLpp/lib -lsmplpp -ltorch
-
 #include <iostream>
 #include <fstream>
-#include <memory>
 
-#include <Eigen/Dense>          // SMPLpp exposes Eigen-compatible getters
-#include <smpl/SMPL.h>        // adjust include path if your project layout differs
+#include <torch/torch.h>
+#include <smpl/SMPL.h>        // SMPLpp public header
 
 int main(int argc, char** argv)
 {
-    // 1. Resolve model file (allow override from CLI)
-    std::string model_path = "../assets/models/smpl_female.npz";      // default
-    if (argc > 1) model_path = argv[1];
+    /* ---------- 1. choose model & device ---------- */
+    std::string model = "../assets/models/smpl_female.json";   // or .npz
+    if (argc > 1) model = argv[1];
+
+    torch::Device dev(torch::kCPU);            // use GPU if you have one
 
     try
     {
-        // 2. Instantiate model
-        auto smpl = std::make_shared<smpl::SMPL>(model_path);
+        /* ---------- 2. build & load model ---------- */
+        smpl::SMPL smpl;
+        smpl.setDevice(dev);
+        smpl.setModelPath(model);
+        smpl.init();                           // heavy I/O happens here
 
-        // 3. Neutral parameters
-        Eigen::VectorXf pose   = Eigen::VectorXf::Zero(72);   // axis-angle for 24 joints
-        Eigen::VectorXf betas  = Eigen::VectorXf::Zero(10);   // shape coefficients
-        Eigen::Vector3f trans  = Eigen::Vector3f::Zero();     // global translation
+        /* ---------- 3. neutral parameters ---------- */
+        torch::Tensor betas = torch::zeros({1, 10},  torch::kFloat32).to(dev);
+        torch::Tensor theta = torch::zeros({1, 24, 3}, torch::kFloat32).to(dev);
 
-        smpl->set_params(pose, betas, trans);                 // update internal buffers
-        smpl->forward();                                      // generate mesh
+        smpl.launch(betas, theta);             // forward pass
 
-        // 4. Fetch results
-        const auto& V = smpl->get_vertices();   // std::vector<Eigen::Vector3f>
-        const auto& F = smpl->get_faces();      // std::vector<Eigen::Vector3i>
+        /* ---------- 4. fetch tensors ---------- */
+        torch::Tensor V = smpl.getVertex().squeeze(0).cpu();      // (6890,3)
+        torch::Tensor F = smpl.getFaceIndex().cpu();              // (13776,3)
 
-        // 5. Write OBJ (1-indexed faces)
+        /* ---------- 5. write OBJ ---------- */
         std::ofstream obj("neutral_mesh.obj");
-        for (const auto& v : V) obj << "v " << v.x() << ' ' << v.y() << ' ' << v.z() << '\n';
-        for (const auto& f : F) obj << "f " << f.x() + 1 << ' ' << f.y() + 1 << ' ' << f.z() + 1 << '\n';
-        obj.close();
+        auto v = V.accessor<float,2>();
+        for (int64_t i = 0; i < V.size(0); ++i)
+            obj << "v " << v[i][0] << ' ' << v[i][1] << ' ' << v[i][2] << '\n';
 
-        std::cout << "✅  Neutral mesh written to neutral_mesh.obj ("
-                  << V.size() << " verts).\n";
+        auto f = F.accessor<int64_t,2>();
+        for (int64_t i = 0; i < F.size(0); ++i)
+            obj << "f " << f[i][0] + 1 << ' '   // +1 for 1-based OBJ indexing
+                << f[i][1] + 1 << ' '
+                << f[i][2] + 1 << '\n';
+
+        std::cout << "✅  neutral_mesh.obj written (" << V.size(0) << " verts)\n";
     }
-    catch (const std::exception& e)
-    {
+    catch (const std::exception& e) {
         std::cerr << "SMPL error: " << e.what() << '\n';
         return EXIT_FAILURE;
     }
