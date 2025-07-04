@@ -1,33 +1,33 @@
+// minimal_neutral.cpp  – neutral-pose mesh with SMPLpp on CPU only
 #include <iostream>
 #include <fstream>
 
 #include <torch/torch.h>
-#include <smpl/SMPL.h>        // SMPLpp public header
+#include <smpl/SMPL.h>
 
 int main(int argc, char** argv)
 {
-    /* ---------- 1. choose model & device ---------- */
-    std::string model = "../assets/models/smpl_female.npz";   // or .npz
+    /* 1. model path ---------------------------------------------------- */
+    std::string model = "../assets/models/smpl_female.npz";
     if (argc > 1) model = argv[1];
 
-    try
-    {
-        /* ---------- 2. build & load model ---------- */
-        smpl::SMPL smpl;
+    try {
+        /* 2. build & load model ---------------------------------------- */
+        smpl::SMPL smpl;               // default device is CPU
         smpl.setModelPath(model);
-        smpl.init();                           // heavy I/O happens here
+        smpl.init();                   // heavy I/O
 
-        /* ---------- 3. neutral parameters ---------- */
-        torch::Tensor betas = torch::zeros({1, 10},  torch::kFloat32).to(dev);
-        torch::Tensor theta = torch::zeros({1, 24, 3}, torch::kFloat32).to(dev);
+        /* 3. neutral parameters ---------------------------------------- */
+        torch::Tensor betas = torch::zeros({1, 10},      torch::kFloat32);
+        torch::Tensor theta = torch::zeros({1, 24, 3},   torch::kFloat32);
 
-        smpl.launch(betas, theta);             // forward pass
+        smpl.launch(betas, theta);     // forward pass (CPU)
 
-        /* ---------- 4. fetch tensors ---------- */
-        torch::Tensor V = smpl.getVertex().squeeze(0).cpu();      // (6890,3)
-        torch::Tensor F = smpl.getFaceIndex().cpu();              // (13776,3)
+        /* 4. fetch tensors --------------------------------------------- */
+        torch::Tensor V = smpl.getVertex().squeeze(0).cpu();   // (6890, 3)
+        torch::Tensor F = smpl.getFaceIndex().cpu();           // (13776, 3)
 
-        /* ---------- 5. write OBJ ---------- */
+        /* 5. write OBJ -------------------------------------------------- */
         std::ofstream obj("neutral_mesh.obj");
         auto v = V.accessor<float,2>();
         for (int64_t i = 0; i < V.size(0); ++i)
@@ -35,7 +35,7 @@ int main(int argc, char** argv)
 
         auto f = F.accessor<int64_t,2>();
         for (int64_t i = 0; i < F.size(0); ++i)
-            obj << "f " << f[i][0] + 1 << ' '   // +1 for 1-based OBJ indexing
+            obj << "f " << f[i][0] + 1 << ' '      // +1 : OBJ is 1-based
                 << f[i][1] + 1 << ' '
                 << f[i][2] + 1 << '\n';
 
