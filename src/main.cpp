@@ -7,10 +7,8 @@
 int main(int argc, char** argv)
 {
     /* ---------- 1. choose model & device ---------- */
-    std::string model = "../assets/models/smpl_female.json";   // or .npz
+    std::string model = "../assets/models/smpl_female.npz";   // or .npz
     if (argc > 1) model = argv[1];
-
-    torch::Device dev(torch::kCPU);            // use GPU if you have one
 
     try
     {
