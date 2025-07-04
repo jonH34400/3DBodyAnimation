@@ -1,1 +1,1 @@
-assets/models/*.npz filter=lfs diff=lfs merge=lfs -text
+assets/models/*.json filter=lfs diff=lfs merge=lfs -text
