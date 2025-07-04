@@ -98,8 +98,8 @@ That downloads:
 ```
 assets/models/
 │
-├── smpl_female.npz
-└── smpl_male.npz
+├── SMPL_FEMALE.json
+└── SMPL_MALE.json
 ```
 
 These files already have the field names / 1-based face indices SMPLpp expects.
@@ -112,14 +112,13 @@ These files already have the field names / 1-based face indices SMPLpp expects.
 2. Download one or more raw models:  
    * `basicModel_f_lbs_10_207_0_v1.0.0.npz`  – female  
    * `basicModel_m_lbs_10_207_0_v1.0.0.npz`  – male  
-   * `SMPL_NEUTRAL.pkl`                       – gender-neutral  
 3. Place the files under **`assets/raw/`**
 4. Convert each file with helper script:
 
    ```bash
    python scripts/convert_smplpp.py \
-     --input  assets/raw/basicModel_f_lbs_10_207_0_v1.0.0.pkl \
-     --output assets/models/smpl_female.npz
+     assets/raw/basicModel_f_lbs_10_207_0_v1.0.0.npz \
+     -o assets/models/SMPL_FEMALE.json
    ```
 
 ---
