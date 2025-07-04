@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
 project(3dba LANGUAGES CXX)
 
+find_package(Torch REQUIRED)          # add this once
+
 # ── header-only xtl ─────────────────────────────────────────────────────
 add_library(xtl INTERFACE)
 target_include_directories(xtl INTERFACE
@@ -21,7 +23,7 @@ add_executable(3dba
     src/main.cpp
 )
 target_link_libraries(3dba
-    PRIVATE smplpp torch xtensor
+    PRIVATE smplpp ${TORCH_LIBRARIES} xtensor stdc++fs
 )
 target_compile_features(3dba PRIVATE cxx_std_17)
 
