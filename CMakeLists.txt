@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 project(3dba LANGUAGES CXX)
 
 find_package(Torch REQUIRED)          # add this once
-
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)   # header-only, no link step
 # ── header-only xtl ─────────────────────────────────────────────────────
 add_library(xtl INTERFACE)
 target_include_directories(xtl INTERFACE
@@ -23,7 +23,7 @@ add_executable(3dba
     src/main.cpp
 )
 target_link_libraries(3dba
-    PRIVATE smplpp ${TORCH_LIBRARIES} xtensor stdc++fs
+    PRIVATE smplpp ${TORCH_LIBRARIES} xtensor stdc++fs Eigen3::Eigen
 )
 target_compile_features(3dba PRIVATE cxx_std_17)
 
