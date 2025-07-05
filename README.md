@@ -35,7 +35,7 @@ The key component is an optimization loop using **Ceres Solver** to fit SMPL mod
 
 ---
 
-## Local Setup (WSL 2)
+## Setup (Ubuntu)
 
 ### 1 Core build toolchain
 ```bash
@@ -44,7 +44,7 @@ sudo apt install -y build-essential cmake gdb pkg-config autotools-dev
 ```
 
 
-### 2 Third-party libraries (apt)
+### 2 Third-party libraries 
 ```bash
 sudo apt install -y \
     libgflags-dev libgoogle-glog-dev \
