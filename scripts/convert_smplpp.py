@@ -1,51 +1,58 @@
+
 #!/usr/bin/env python3
-"""
-Convert an official SMPL .npz (or .pkl) to the layout SMPLpp expects.
+import argparse, json, pathlib, numpy as np
 
-Input keys  :  v_template, f, weights, shapedirs, posedirs,
-               J_regressor, kintree_table
-Output keys :  vertices_template, face_indices (1-based),
-               weights, shape_blend_shapes, pose_blend_shapes,
-               joint_regressor, kinematic_tree
-"""
+# enforce exact shape when we know it must match
+def ensure(arr, shape, name):
+    assert arr.shape == shape, f"{name}: expected {shape}, got {arr.shape}"
+    return arr
 
-import argparse, numpy as np, pickle, os, pathlib, sys, scipy.sparse as sp
-
-def load_model(path):
-    if path.suffix == ".npz":
-        data = np.load(path, allow_pickle=True)
-    elif path.suffix == ".pkl":
-        # raw pickle can be py2 or py3; allow both
-        with open(path, "rb") as f:
-            data = pickle.load(f, encoding="latin1")
-    else:
-        sys.exit(f"Unsupported extension: {path.suffix}")
-    return data
-
-def dense(arr):
-    return arr.toarray() if isinstance(arr, sp.spmatrix) else arr
-
-def convert(raw):
-    return dict(
-        vertices_template = np.asarray(raw["v_template"]),
-        face_indices      = np.asarray(raw["f"]) + 1,        # 0->1 indexing
-        weights           = np.asarray(raw["weights"]),
-        shape_blend_shapes= np.asarray(raw["shapedirs"]),
-        pose_blend_shapes = np.asarray(raw["posedirs"]),
-        joint_regressor   = dense(raw["J_regressor"]),
-        kinematic_tree    = np.asarray(raw["kintree_table"]),
-    )
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--input",  required=True, help="raw SMPL .pkl or .npz")
-    ap.add_argument("--output", required=True, help="destination .npz")
-    args = ap.parse_args()
+    p = argparse.ArgumentParser(description="Convert SMPL NPZ to SMPL++ JSON")
+    p.add_argument("npz")
+    p.add_argument("-o", "--out", default="SMPL_MODEL.json")
+    args = p.parse_args()
 
-    raw   = load_model(pathlib.Path(args.input))
-    model = convert(raw)
-    np.savez(args.output, **model)
-    print("Wrote", os.path.abspath(args.output))
+    d = np.load(args.npz)
+
+    vt = ensure(d["v_template"], (6890, 3), "v_template").astype(np.float32)  # (6890,3)
+
+    sd_raw = d["shapedirs"]
+    sd = sd_raw.astype(np.float32).reshape(6890, 3, 10)
+   
+    # (6890,3,10)
+
+    pd_raw = d["posedirs"]
+    pd = pd_raw.astype(np.float32).reshape(6890, 3, 207)
+  
+    # (6890,3,207)
+
+    jr = d["J_regressor"]
+    if jr.shape == (6890, 24):
+        jr = jr.T
+    jr = ensure(jr, (24, 6890), "J_regressor").astype(np.float32)               # (24,6890)
+
+    wt = ensure(d["weights"], (6890, 24), "weights").astype(np.float32)       # (6890,24)
+    fi = ensure(d["f"], (13776, 3), "f").astype(np.int32)                     # (13776,3)
+    kt = ensure(d["kintree_table"], (2, 24), "kintree_table").astype(np.int64) # (2,24)
+
+    out = {
+        "vertices_template": vt.tolist(),
+        "shape_blend_shapes": sd.tolist(),
+        "pose_blend_shapes": pd.tolist(),
+        "joint_regressor": jr.tolist(),
+        "weights": wt.tolist(),
+        "face_indices": fi.tolist(),
+        "kinematic_tree": kt.tolist(),
+    }
+
+    dest = pathlib.Path(args.out)
+    dest.write_text(json.dumps(out))
+    print("wrote", dest.resolve())
+
 
 if __name__ == "__main__":
     main()
+
+

@@ -1,2 +1,2 @@
 build/
-assets/raw/*
+assets/models/SMPL_*.json

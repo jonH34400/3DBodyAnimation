@@ -82,13 +82,9 @@ git submodule update --init --recursive
 
 
 
+## Model assets — SMPL models
 
-## Model assets — SMPL models (download **or** reproduce)
-
-### 1  Quick start – pull the pre-processed assets via **Git LFS**
-
-You can get the ready-to-use `.npz` files in **`assets/models/`**:
-
+### 1  Pull original `.npz` via **Git LFS**
 ```bash
 git lfs pull
 ```
@@ -96,31 +92,25 @@ git lfs pull
 That downloads:
 
 ```
-assets/models/
+assets/raw/
 │
-├── SMPL_FEMALE.json
-└── SMPL_MALE.json
+├── basicModel_f_lbs_10_207_0_v1.0.0.npz
+└── basicModel_m_lbs_10_207_0_v1.0.0.npz
 ```
 
-These files already have the field names / 1-based face indices SMPLpp expects.
-
-
-
-### 2 (Alternatively) Reproduce the preprocessed model `.npz` files yourself
-
+### 2 (Or) Download from official website
 1. Create a free account at **<http://smpl.is.tue.mpg.de>**  
 2. Download one or more raw models:  
    * `basicModel_f_lbs_10_207_0_v1.0.0.npz`  – female  
    * `basicModel_m_lbs_10_207_0_v1.0.0.npz`  – male  
-3. Place the files under **`assets/raw/`**
-4. Convert each file with helper script:
 
+
+### 3 Preprocess model to `.json` 
    ```bash
    python scripts/convert_smplpp.py \
      assets/raw/basicModel_f_lbs_10_207_0_v1.0.0.npz \
      -o assets/models/SMPL_FEMALE.json
    ```
-
 ---
 
 ## Build & run
