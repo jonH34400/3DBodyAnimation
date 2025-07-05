@@ -116,13 +116,8 @@ assets/raw/
 ## Build & run
 ```bash
 mkdir build && cd build
-# cmake -DCMAKE_BUILD_TYPE=Release -DTorch_DIR=$Torch_DIR ..
-# make -j$(nproc)
-# cmake -S . -B build -DCMAKE_PREFIX_PATH="$LIBTORCH_DIR"
-# cmake --build build -j8
 cmake ..
 make -j8
 ./3dba
-./smpl_test  
 ```
-A successful build drops a `test.obj` T-pose.
+A successful build drops a `neutral_mesh.obj` T-pose.

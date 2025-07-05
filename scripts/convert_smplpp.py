@@ -34,7 +34,7 @@ def main():
     jr = ensure(jr, (24, 6890), "J_regressor").astype(np.float32)               # (24,6890)
 
     wt = ensure(d["weights"], (6890, 24), "weights").astype(np.float32)       # (6890,24)
-    fi = ensure(d["f"], (13776, 3), "f").astype(np.int32) + 1
+    fi = ensure(d["f"], (13776, 3), "f").astype(np.int32)
     kt = ensure(d["kintree_table"], (2, 24), "kintree_table").astype(np.int64) # (2,24)
 
     out = {
