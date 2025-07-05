@@ -8,7 +8,7 @@
 int main(int argc, char** argv)
 {
     /* 1. model path ---------------------------------------------------- */
-    std::string model = "../assets/models/smpl_female.npz";
+    std::string model = "../assets/models/SMPL_FEMALE.json";
     if (argc > 1) model = argv[1];
 
     try {
@@ -39,7 +39,7 @@ int main(int argc, char** argv)
                 << f[i][1] + 1 << ' '
                 << f[i][2] + 1 << '\n';
 
-        std::cout << "✅  neutral_mesh.obj written (" << V.size(0) << " verts)\n";
+        std::cout << "neutral_mesh.obj written (" << V.size(0) << " verts)\n";
     }
     catch (const std::exception& e) {
         std::cerr << "SMPL error: " << e.what() << '\n';
