@@ -77,6 +77,7 @@ The repo already lists external dependencies in **.gitmodules** (`external/SMPLp
 ```bash
 git clone --recursive https://github.com/jonH34400/3DBodyAnimation.git
 cd 3DBodyAnimation
+git checkout SMPLpp_integration
 git submodule update --init --recursive
 ```
 
