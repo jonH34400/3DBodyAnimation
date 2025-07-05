@@ -33,7 +33,7 @@ int main(int argc, char** argv)
         for (int64_t i = 0; i < V.size(0); ++i)
             obj << "v " << v[i][0] << ' ' << v[i][1] << ' ' << v[i][2] << '\n';
 
-        auto f = F.accessor<int64_t,2>();
+        auto f = F.accessor<int32_t,2>();
         for (int64_t i = 0; i < F.size(0); ++i)
             obj << "f " << f[i][0] + 1 << ' '      // +1 : OBJ is 1-based
                 << f[i][1] + 1 << ' '
