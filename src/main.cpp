@@ -35,9 +35,9 @@ int main(int argc, char** argv)
 
         auto f = F.accessor<int32_t,2>();
         for (int64_t i = 0; i < F.size(0); ++i)
-            obj << "f " << f[i][0] + 1 << ' '      // +1 : OBJ is 1-based
-                << f[i][1] + 1 << ' '
-                << f[i][2] + 1 << '\n';
+            obj << "f " << f[i][0] << ' '      
+                << f[i][1] << ' '
+                << f[i][2] << '\n';
 
         std::cout << "neutral_mesh.obj written (" << V.size(0) << " verts)\n";
     }
