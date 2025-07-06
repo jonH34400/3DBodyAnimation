@@ -41,7 +41,10 @@ int main(int argc, char** argv)
 
         std::cout << "neutral_mesh.obj written (" << V.size(0) << " verts)\n";
 
+        // projection test
         torch::Tensor J = smpl.getRestJoint().squeeze(0).cpu();
+        torch::Tensor trans = torch::tensor({0.0f, 0.0f, 2.0f});   // 2 m in +Z
+        J += trans;                      
         auto j = J.accessor<float,2>();
 
         const int W = 1280, H = 720;
