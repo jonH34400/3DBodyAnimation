@@ -2,7 +2,6 @@
 #!/usr/bin/env python3
 import argparse, json, pathlib, numpy as np
 
-# enforce exact shape when we know it must match
 def ensure(arr, shape, name):
     assert arr.shape == shape, f"{name}: expected {shape}, got {arr.shape}"
     return arr
@@ -48,6 +47,7 @@ def main():
     }
 
     dest = pathlib.Path(args.out)
+    dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(json.dumps(out))
     print("wrote", dest.resolve())
 
