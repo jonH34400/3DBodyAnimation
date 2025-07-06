@@ -35,11 +35,24 @@ int main(int argc, char** argv)
 
         auto f = F.accessor<int32_t,2>();
         for (int64_t i = 0; i < F.size(0); ++i)
-            obj << "f " << f[i][0] << ' '      
-                << f[i][1] << ' '
-                << f[i][2] << '\n';
+            obj << "f " << f[i][0] + 1 << ' '      
+                << f[i][1] + 1 << ' '
+                << f[i][2] + 1 << '\n';
 
         std::cout << "neutral_mesh.obj written (" << V.size(0) << " verts)\n";
+
+        torch::Tensor J = smpl.getRestJoint().squeeze(0).cpu();
+        auto j = J.accessor<float,2>();
+
+        const int W = 1280, H = 720;
+        const double fx = 1000, fy = 1000, cx = W/2, cy = H/2;
+
+        for (int i = 0; i < 24; ++i) {
+            double X = j[i][0], Y = j[i][1], Z = j[i][2];
+            double u = fx*X/Z + cx;
+            double v = fy*Y/Z + cy;
+            std::cout << "joint " << i << ": (" << u << ", " << v << ")\n";
+        }
     }
     catch (const std::exception& e) {
         std::cerr << "SMPL error: " << e.what() << '\n';
