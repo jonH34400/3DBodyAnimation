@@ -39,20 +39,19 @@ The key component is an optimization loop using **Ceres Solver** to fit SMPL mod
 
 ### 1 Core build toolchain
 ```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y build-essential cmake gdb pkg-config autotools-dev
+sudo apt update && sudo apt -y upgrade
+sudo apt install -y \
+    build-essential cmake gdb pkg-config
+
 ```
 
 
 ### 2 Third-party libraries 
 ```bash
 sudo apt install -y \
-    libgflags-dev libgoogle-glog-dev \
-    libatlas-base-dev libeigen3-dev libsuitesparse-dev \
-    libceres-dev \
-    libicu-dev libbz2-dev libboost-all-dev \
-    libflann-dev libfreeimage-dev liblz4-dev \
-    libopencv-dev \
+    libeigen3-dev            \  
+    libceres-dev             \ 
+    libsuitesparse-dev       \  
     nlohmann-json3-dev 
 ```
 
