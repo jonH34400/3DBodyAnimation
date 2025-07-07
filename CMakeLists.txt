@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 project(3dba LANGUAGES CXX)
-
+find_package(Torch REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)   
 
 add_library(xtl INTERFACE)
