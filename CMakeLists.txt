@@ -1,30 +1,3 @@
-# cmake_minimum_required(VERSION 3.15)
-# project(3dba LANGUAGES CXX)
-
-# set(CMAKE_CXX_STANDARD 17)
-# set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# find_package(Eigen3 3.3 REQUIRED NO_MODULE)          
-# find_package(Ceres   REQUIRED)
-
-# # top-level CMakeLists.txt — put this *above* add_subdirectory
-# set(SMPLXPP_BUILD_VIEWER OFF CACHE BOOL "disable OpenGL viewer")
-
-# add_subdirectory(external/smplxpp EXCLUDE_FROM_ALL)
-
-# find_package(nlohmann_json 3.2.0 REQUIRED)
-
-# add_executable(3dba src/main.cpp)
-
-# target_include_directories(3dba PRIVATE include ${CMAKE_CURRENT_SOURCE_DIR}/external/smplxpp/include)
-
-# target_link_libraries(3dba
-#     PRIVATE
-#         smplxpp_eigen     
-#         ceres
-#         Eigen3::Eigen
-#         nlohmann_json::nlohmann_json
-# )
 cmake_minimum_required(VERSION 3.15)
 project(3dba LANGUAGES CXX)
 
@@ -48,6 +21,7 @@ add_subdirectory(external/smplxpp EXCLUDE_FROM_ALL)
 # ─── your app ───────────────────────────────────
 add_executable(3dba
     src/main.cpp
+    src/OptimizeSMPL.cpp
 )
 
 # expose your own public headers

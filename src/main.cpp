@@ -10,9 +10,8 @@
 #include <smplx/smplx.hpp>
 
 // ── local ─────────────────────────────────────────────────────────────
-#include "ReprojCost.hpp"
+#include "OptimizeSMPL.hpp"
 
-struct PixelKP { int jid; double u,v; };
 
 // very small loader for MediaPipe JSON (33 landmarks)
 static const int MAP[24] = { -1,23,24, 11,-1,0, 11,12,13,14,15,16,
@@ -52,85 +51,33 @@ int main(int argc,char** argv)
         std::cout<<"usage: <SMPL.npz> <mp.json>\n"; return 0;
     }
 
-    // 1. load SMPL_v1 (10-shape) model
     smplx::Model<smplx::model_config::SMPL_v1> model(argv[1]);
 
-    // 2. keypoints
     constexpr int W=1280,H=720;
     auto kps = load_mp(argv[2],W,H);
     std::cout<<"keypoints used: "<<kps.size()<<"\n";
 
-    // 3. build Ceres problem
-    ceres::Problem pb;
-    double theta[72]={0}, beta[10]={0}, trans[3]={0,0,2};
+    auto result = optimize_smpl(kps, model);
 
-    for(auto& kp : kps){
-        auto* cost = new ceres::NumericDiffCostFunction<
-                         ReprojCost,ceres::CENTRAL,2,72,10,3>(
-                         new ReprojCost(kp.jid,kp.u,kp.v,model));
-        pb.AddResidualBlock(cost,nullptr,theta,beta,trans);
-    }
+    std::cout << result.summary.BriefReport() << "\n";
 
-    ceres::Solver::Options opts;
-    opts.linear_solver_type = ceres::DENSE_QR;
-    opts.max_num_iterations = 50;
-    opts.minimizer_progress_to_stdout = true;
-
-    ceres::Solver::Summary sum;
-    ceres::Solve(opts,&pb,&sum);
-    std::cout<<sum.BriefReport()<<"\n";
-
-    // ** Debug: print optimized parameters **
-    std::cout<<"Final trans : ["<<trans[0]<<", "<<trans[1]<<", "<<trans[2]<<"]\n";
+    std::cout<<"Final trans : ["<<result.trans[0]<<", "<<result.trans[1]<<", "<<result.trans[2]<<"]\n";
     std::cout<<"Beta[0..4]  : { ";
-    for(int i=0;i<5;++i) std::cout<<beta[i]<<(i<4?", ":" ");
+    for(int i=0;i<5;++i) std::cout<<result.beta[i]<<(i<4?", ":" ");
     std::cout<<"}\n";
     std::cout<<"Theta[0..4] : { ";
-    for(int i=0;i<5;++i) std::cout<<theta[i]<<(i<4?", ":" ");
+    for(int i=0;i<5;++i) std::cout<<result.theta[i]<<(i<4?", ":" ");
     std::cout<<"}\n";
 
-    // 4. instantiate Body and update
     smplx::Body<smplx::model_config::SMPL_v1> body(model);
     using S = smplx::Scalar;
     body.shape().head<10>() =
-        Eigen::Map<const Eigen::Matrix<double,10,1>>(beta).template cast<S>();
+        Eigen::Map<const Eigen::Matrix<double,10,1>>(result.beta).template cast<S>();
     body.pose() =
-        Eigen::Map<const Eigen::Matrix<double,72,1>>(theta).template cast<S>();
+        Eigen::Map<const Eigen::Matrix<double,72,1>>(result.theta).template cast<S>();
     body.trans() =
-        Eigen::Map<const Eigen::Matrix<double,3 ,1>>(trans).template cast<S>();
+        Eigen::Map<const Eigen::Matrix<double,3 ,1>>(result.trans).template cast<S>();
 
     body.update();
 
-    // ** Debug: print first two vertices **
-    const auto& V = body.verts();
-    if(V.rows()>=2){
-        std::cout<<"Vertex[0] = "<<V.row(0)<<"\n";
-        std::cout<<"Vertex[1] = "<<V.row(1)<<"\n";
-    }
-
-    // 5. export mesh
-    std::ofstream out("fitted.obj");
-    for(int i=0;i<V.rows();++i)
-        out<<"v "<<V(i,0)<<' '<<V(i,1)<<' '<<V(i,2)<<"\n";
-    for(int i=0;i<model.faces.rows();++i)
-        out<<"f "<<model.faces(i,0)+1<<' '
-                  <<model.faces(i,1)+1<<' '
-                  <<model.faces(i,2)+1<<"\n";
-    std::cout<<"wrote fitted.obj\n";
-
-
-
-    smplx::Body<smplx::model_config::SMPL_v1> body_neutral(model);
-    body_neutral.shape().head<10>()=Eigen::Map<const Eigen::Matrix<double,10,1>>(beta).template cast<S>();
-    body_neutral.pose().setZero();
-    body_neutral.trans()=Eigen::Map<const Eigen::Matrix<double,3,1>>(trans).template cast<S>();
-    body_neutral.update();
-    std::ofstream outN("neutral.obj");
-    auto N=body_neutral.verts();
-    for(int i=0;i<N.rows();++i)
-        outN<<"v "<<N(i,0)<<" "<<N(i,1)<<" "<<N(i,2)<<"\n";
-    for(int i=0;i<model.faces.rows();++i)
-        outN<<"f "<<model.faces(i,0)+1<<" "
-            <<model.faces(i,1)+1<<" "<<model.faces(i,2)+1<<"\n";
-    std::cout<<"wrote neutral.obj\n";
 }
