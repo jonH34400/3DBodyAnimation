@@ -31,6 +31,6 @@ add_executable(single_frame_fit
     src/demo_single_frame.cpp
 )
 target_link_libraries(single_frame_fit
-    PRIVATE smplpp torch xtensor ceres
+    PRIVATE smplpp Eigen3::Eigen ${TORCH_LIBRARIES} xtensor ceres
 )
 target_compile_features(single_frame_fit PRIVATE cxx_std_17)
