@@ -9,4 +9,4 @@
 	url = https://github.com/xtensor-stack/xtl.git
 [submodule "external/smplxpp"]
 	path = external/smplxpp
-	url = https://github.com/sxyu/smplxpp.git
+	url = https://github.com/dengamusic/smplxpp.git
