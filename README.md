@@ -76,7 +76,7 @@ The repo already lists external dependencies in **.gitmodules** (`external/SMPLp
 ```bash
 git clone --recursive https://github.com/jonH34400/3DBodyAnimation.git
 cd 3DBodyAnimation
-git checkout SMPLpp_integration
+git checkout ceres_autodiff 
 git submodule update --init --recursive
 ```
 
@@ -105,7 +105,11 @@ assets/raw/
    * `basicModel_m_lbs_10_207_0_v1.0.0.npz`  – male  
 
 
-### 3 Preprocess model to `.json` 
+### 3 Preprocess `.npz` to `.npz`
+   Run scripts/smpl2npz.py
+
+
+## Preprocess model to `.json` (old)
    ```bash
    python scripts/convert_smplpp.py \
      assets/raw/basicModel_f_lbs_10_207_0_v1.0.0.npz \
