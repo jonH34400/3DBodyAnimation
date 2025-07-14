@@ -16,43 +16,47 @@ struct ReprojCost
     /*  theta72 : pose (72)   */
     /*  beta10  : shape (10)  */
     /*  trans3  : trans (3)   */
-    bool operator()(const double* const theta72,
-                    const double* const beta10,
-                    const double* const trans3,
+    bool operator()(const double* theta72,
+                    const double* beta10,
+                    const double* trans3,
+                    const double* scale1,
                     double* residual) const
     {
-        using S   = smplx::Scalar;           // typically float
-        using Vec = Eigen::Matrix<S, Eigen::Dynamic, 1>;
+        using S = smplx::Scalar;
 
-        // Build a temporary body with the SMPL_v1 config
+        // ---------- build body (unchanged) ----------
         smplx::Body<smplx::model_config::SMPL_v1> body(model_);
-        body.set_zero();                      // clear all parameters
+        body.set_zero();
 
-        // Shape (300 dims in SMPL-X but only first 10 used here)
-        Eigen::Map<const Eigen::Matrix<double,10,1>> beta10_map(beta10);
-        body.shape().head<10>() = beta10_map.template cast<S>();
+        body.shape().head<10>() =
+            Eigen::Map<const Eigen::Matrix<double,10,1>>(beta10).template cast<S>();
+        body.pose()  =
+            Eigen::Map<const Eigen::Matrix<double,72,1>>(theta72).template cast<S>();
+        body.trans() =
+            Eigen::Map<const Eigen::Matrix<double,3,1>>(trans3 ).template cast<S>();
 
-        // Pose
-        body.pose() = Eigen::Map<const Eigen::Matrix<double,72,1>>(theta72)
-                          .template cast<S>();
+        body.update();
 
-        // Translation
-        body.trans() = Eigen::Map<const Eigen::Matrix<double,3,1>>(trans3)
-                           .template cast<S>();
+        // ---------- joint position ----------
+        Eigen::Vector3d P = body.joints().row(jid_).cast<double>();   // (X,Y,Z) in metres
 
-        body.update();  // compute verts & joints via LBS
+        const double s = scale1[0];           // global scale  (>0)
 
-        // Project the requested joint
-        const auto& J = body.joints();        // (24×3 in S)
-        const S X = J(jid_,0), Y = J(jid_,1), Z = J(jid_,2);
+        // apply scale in world space, then translation
+        const double Xc = s * P.x();
+        const double Yc = s * P.y();
+        const double Zc = s * P.z();
 
-        const double u_proj = FX * double(X) / double(Z) + CX;
-        const double v_proj = FY * double(Y) / double(Z) + CY;
+        // ---------- pin-hole projection (single Y-flip) ----------
+        const double u_proj =  FX *  Xc / Zc + CX;
+        const double v_proj =  FY * -Yc / Zc + CY;
 
+        // ---------- residual ----------
         residual[0] = u_proj - u_;
         residual[1] = v_proj - v_;
         return true;
     }
+
 
 private:
     int   jid_;
