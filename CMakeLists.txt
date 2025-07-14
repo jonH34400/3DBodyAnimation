@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Eigen3       3.3 REQUIRED NO_MODULE)
 find_package(Ceres         REQUIRED)
 find_package(nlohmann_json 3.2.0 REQUIRED)
+find_package(OpenCV REQUIRED)
 
 #set(SMPLXPP_MODEL "SMPL" CACHE STRING
  #   "Which SMPL(X) model to build: SMPL / SMPLH / SMPLX / SMPLXpca" FORCE)
@@ -24,10 +25,11 @@ add_executable(3dba
     src/OptimizeSMPL.cpp
 )
 
+include_directories(${OpenCV_INCLUDE_DIRS})
+
 # expose your own public headers
 target_include_directories(3dba PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    # and still need their public headers too:
     ${CMAKE_CURRENT_SOURCE_DIR}/external/smplxpp/include
 )
 
@@ -37,4 +39,5 @@ target_link_libraries(3dba PRIVATE
     ceres
     Eigen3::Eigen
     nlohmann_json::nlohmann_json
+    ${OpenCV_LIBS}
 )
