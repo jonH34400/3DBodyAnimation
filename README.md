@@ -49,6 +49,7 @@ sudo apt install -y \
 ### 2 Third-party libraries 
 ```bash
 sudo apt install -y \
+    libopencv-dev \
     libeigen3-dev            \  
     libceres-dev             \ 
     libsuitesparse-dev       \  
