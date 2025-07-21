@@ -1,5 +1,6 @@
 #include "OptimizeSMPL.hpp"
 #include "ReprojCost.hpp"
+#include "WandbCallback.hpp" 
 #include <random>
 
 
@@ -88,26 +89,14 @@ SMPLFitResult optimize_smpl(const std::vector<PixelKP>&              kps,
     opts.max_num_iterations              = max_iters;
     opts.minimizer_progress_to_stdout    = true;
 
+    // Real-time loss streaming
+    static WandbCallback wb_cb;             // keep it alive for the whole solve
+    opts.callbacks.push_back(&wb_cb);
+    opts.update_state_every_iteration = true;
+
     ceres::Solver::Summary sum;
     ceres::Solve(opts, &pb, &sum);
 
     result.summary = sum;
     return result;
 }
-
-
-// const double scale_prior = 1.0;
-        // pb.AddResidualBlock(
-        //     new ceres::AutoDiffCostFunction<ScalePrior,1,1>(
-        //         new ScalePrior(scale_prior, 0.05)),   // λ = 1/σ²
-        //     nullptr, &result.scale);
-        
-        // pb.SetParameterLowerBound(result.trans, 2,  2.5);  // Z ≥ 0.5 m
-        // pb.SetParameterLowerBound(result.trans, 0,  -0.5);  // -1 m ≤ tx ≤ +1 m
-        // pb.SetParameterUpperBound(result.trans, 0,   0.5);
-        // pb.SetParameterLowerBound(result.trans, 1,  -0.5);
-        // pb.SetParameterUpperBound(result.trans, 1,   0.5);
-
-        // pb.AddResidualBlock(
-        //     new ceres::AutoDiffCostFunction<CentrePrior,2,3>(new CentrePrior),
-        //     nullptr, result.trans);

@@ -41,7 +41,7 @@ The key component is an optimization loop using **Ceres Solver** to fit SMPL mod
 ```bash
 sudo apt update && sudo apt -y upgrade
 sudo apt install -y \
-    build-essential cmake gdb pkg-config
+    build-essential cmake gdb pkg-config g++-12
 
 ```
 
@@ -49,11 +49,11 @@ sudo apt install -y \
 ### 2 Third-party libraries 
 ```bash
 sudo apt install -y \
-    libopencv-dev \
-    libeigen3-dev            \  
-    libceres-dev             \ 
-    libsuitesparse-dev       \  
-    nlohmann-json3-dev 
+   libopencv-dev            \
+   libeigen3-dev            \  
+   libceres-dev             \ 
+   libsuitesparse-dev       \  
+   nlohmann-json3-dev 
 ```
 
 
@@ -121,8 +121,8 @@ assets/raw/
 ## Build & run
 ```bash
 mkdir build && cd build
-cmake ..
-make -j8
-./3dba
+CC=gcc-12 CXX=g++-12 cmake .. -DCMAKE_CXX_STANDARD=20 -DUSE_WANDB=ON
+make -j$(nproc)
+
 ```
 A successful build drops a `neutral_mesh.obj` T-pose.

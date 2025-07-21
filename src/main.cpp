@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 #include <smplx/smplx.hpp>
 #include "OptimizeSMPL.hpp"
+#include "wandbcpp.hpp"
 
 // ── MediaPipe-to-SMPL mapping ------------------------------------------
 static const int MP_MAP[24] = {
@@ -235,6 +236,9 @@ int main(int argc, char** argv)
 
     cv::imwrite("out_opt.png", img_opt);
     cv::waitKey(0);
+
+    wandbcpp::log({{"init_overlay", wandbcpp::Image("out_init.png")},
+               {"opt_overlay",  wandbcpp::Image("out_opt.png")}});
     return 0;
 
 }
