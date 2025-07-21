@@ -1,13 +1,36 @@
 #include "OptimizeSMPL.hpp"
 #include "ReprojCost.hpp"
 #include <random>
+#include <fstream>  // << Esta línea es necesaria
 
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+/* TRYS FOR SOLVING THE CERES AUTODIFF******************************************************************/
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct LossLogger : public ceres::IterationCallback {
+    std::vector<double>& losses;
+
+    explicit LossLogger(std::vector<double>& loss_storage)
+        : losses(loss_storage) {}
+
+    ceres::CallbackReturnType operator()(const ceres::IterationSummary& summary) override {
+        losses.push_back(summary.cost);
+        return ceres::SOLVER_CONTINUE;
+    }
+};
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 SMPLFitResult optimize_smpl(const std::vector<PixelKP>&              kps,
                             smplx::Model<smplx::model_config::SMPL_v1>& model,
                             int max_iters)
 {
     SMPLFitResult result{};
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
+    std::vector<double> loss_curve;                      // << AÑADIR
+    LossLogger* logger = new LossLogger(loss_curve);     // << AÑADIR
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
     {
         std::mt19937 rng(
             static_cast<unsigned>(
@@ -18,42 +41,28 @@ SMPLFitResult optimize_smpl(const std::vector<PixelKP>&              kps,
         result.theta[0] = yaw(rng);
     }
     
-    std::fill_n(result.beta , 10, 0.0);
-    std::fill_n(result.theta, 72, 0.0);
+    //std::fill_n(result.beta, 10, 0.0);  // ← This erases your random initialization!
+    //std::fill_n(result.theta, 72, 0.0); // ← Same problem
     result.trans[0] = 0.0;
     result.trans[1] = 0.0;
     result.trans[2] = 2.0;
-    double s_log = 0.0;     
     result.scale = 1.0; 
+    double s_log = std::log(result.scale);     
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
     /* ---------- 1. common numeric-diff options ---------- */
-    ceres::NumericDiffOptions nd_opt;
-    nd_opt.relative_step_size                     = 1e-2;   // ← big enough for float
-    nd_opt.ridders_relative_initial_step_size     = 1e-2;   // idem
-
+    //ceres::NumericDiffOptions nd_opt;
+    //nd_opt.relative_step_size                     = 1e-6;   // ← big enough for float
+    //nd_opt.ridders_relative_initial_step_size     = 1e-6;   // idem
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
     /* ---------- 2. problem set-up ---------- */
     ceres::Problem pb;
     for (const auto& kp : kps)
     {
-        auto* cost = new ceres::NumericDiffCostFunction<
-            ReprojCost, ceres::CENTRAL,
-            2,              // residual dimension
-            72, 10, 3, 1    // θ, β, t
-        >(
-            new ReprojCost(kp.jid, kp.u, kp.v, model),
-            ceres::TAKE_OWNERSHIP,
-            2,
-            nd_opt);
+        auto* cost = new ceres::AutoDiffCostFunction<ReprojCost, 2, 72, 10, 3, 1>(
+            new ReprojCost(kp.jid, kp.u, kp.v, model));
 
-        /* robustify each key-point */
-        ceres::LossFunction* loss = new ceres::HuberLoss(5.0);   // δ in pixels
-
-        pb.AddResidualBlock(cost, loss,
-                            result.theta,
-                            result.beta,
-                            result.trans,
-                            &result.scale);
-        /* optional: keep global scale in a reasonable range */
-        result.scale = std::exp(s_log);
+        ceres::LossFunction* loss = new ceres::HuberLoss(5.0);  // δ in pixels
+        pb.AddResidualBlock(cost, loss, result.theta, result.beta, result.trans, &result.scale);
         
     }
 
@@ -85,13 +94,30 @@ SMPLFitResult optimize_smpl(const std::vector<PixelKP>&              kps,
     /* ---------- 3. solver options ---------- */
     ceres::Solver::Options opts;
     opts.linear_solver_type              = ceres::DENSE_QR;
-    opts.max_num_iterations              = max_iters;
+    opts.max_num_iterations              = 100;
     opts.minimizer_progress_to_stdout    = true;
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
+    opts.update_state_every_iteration = true;            // << NECESARIO para que los callbacks funcionen
+    opts.callbacks.push_back(logger);                    // << AÑADIR CALLBACK
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     ceres::Solver::Summary sum;
     ceres::Solve(opts, &pb, &sum);
 
     result.summary = sum;
+    std::cout << sum.FullReport() << "\n";
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Guardar la curva de pérdida para graficar
+    std::ofstream loss_file("loss_curve.txt");
+    loss_file << "iteration,loss\n";
+    for (size_t i = 0; i < loss_curve.size(); ++i) {
+        loss_file << i << "," << loss_curve[i] << "\n";
+    }
+    loss_file.close();
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     return result;
 }
 

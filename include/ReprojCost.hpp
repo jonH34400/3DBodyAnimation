@@ -1,65 +1,78 @@
 #pragma once
+
 #include <Eigen/Core>
+#include <ceres/ceres.h>
 #include <smplx/smplx.hpp>
 
-// ── pin-hole intrinsics ------------------------------------------------
 constexpr double FX = 1000, FY = 1000, CX = 640, CY = 360;
 
-// ── Numeric-diff reprojection cost ------------------------------------
-struct ReprojCost
-{
-    // Note: we now explicitly use the SMPL_v1 config (10 shape dims)
+// General: si T es double, simplemente devuelve T
+template <typename T>
+double JetExtract(const T& val) {
+    return static_cast<double>(val);  // Para tipos escalares normales
+}
+
+template <typename T, int N>
+double JetExtract(const ceres::Jet<T, N>& val) {
+    return val.a;
+}
+
+struct ReprojCost {
     ReprojCost(int jid, double u_px, double v_px,
                smplx::Model<smplx::model_config::SMPL_v1>& model)
         : jid_(jid), u_(u_px), v_(v_px), model_(model) {}
 
-    /*  theta72 : pose (72)   */
-    /*  beta10  : shape (10)  */
-    /*  trans3  : trans (3)   */
-    bool operator()(const double* theta72,
-                    const double* beta10,
-                    const double* trans3,
-                    const double* scale1,
-                    double* residual) const
+    template <typename T>
+    bool operator()(const T* const theta,
+                    const T* const beta,
+                    const T* const trans,
+                    const T* const scale,
+                    T* residual) const
     {
-        using S = smplx::Scalar;
+        // ------------------------------
+        // 1. Convert Jet<T,N> to double
+        // ------------------------------
+        Eigen::Matrix<double, 72, 1> theta_d;
+        Eigen::Matrix<double, 10, 1> beta_d;
+        Eigen::Matrix<double, 3, 1> trans_d;
 
-        // ---------- build body (unchanged) ----------
+        for (int i = 0; i < 72; ++i)
+            theta_d[i] = JetExtract(theta[i]);
+        for (int i = 0; i < 10; ++i)
+            beta_d[i] = JetExtract(beta[i]);
+        for (int i = 0; i < 3; ++i)
+            trans_d[i] = JetExtract(trans[i]);
+
+        // ------------------------------
+        // 2. Forward model (in double)
+        // ------------------------------
         smplx::Body<smplx::model_config::SMPL_v1> body(model_);
         body.set_zero();
-
-        body.shape().head<10>() =
-            Eigen::Map<const Eigen::Matrix<double,10,1>>(beta10).template cast<S>();
-        body.pose()  =
-            Eigen::Map<const Eigen::Matrix<double,72,1>>(theta72).template cast<S>();
-        body.trans() =
-            Eigen::Map<const Eigen::Matrix<double,3,1>>(trans3 ).template cast<S>();
-
+        body.shape().head<10>() = beta_d;
+        body.pose() = theta_d;
+        body.trans() = trans_d;
         body.update();
 
-        // ---------- joint position ----------
-        Eigen::Vector3d P = body.joints().row(jid_).cast<double>();   // (X,Y,Z) in metres
+        Eigen::Vector3d P = body.joints().row(jid_);
 
-        const double s = scale1[0];           // global scale  (>0)
+        // ------------------------------
+        // 3. Projection (AutoDiff active)
+        // ------------------------------
+        T s = scale[0];
+        const T Xc = s * T(P.x());
+        const T Yc = s * T(P.y());
+        const T Zc = s * T(P.z());
 
-        // apply scale in world space, then translation
-        const double Xc = s * P.x();
-        const double Yc = s * P.y();
-        const double Zc = s * P.z();
+        const T u_proj = FX * Xc / Zc + CX;
+        const T v_proj = FY * -Yc / Zc + CY;
 
-        // ---------- pin-hole projection (single Y-flip) ----------
-        const double u_proj =  FX *  Xc / Zc + CX;
-        const double v_proj =  FY * -Yc / Zc + CY;
-
-        // ---------- residual ----------
-        residual[0] = u_proj - u_;
-        residual[1] = v_proj - v_;
+        residual[0] = u_proj - T(u_);
+        residual[1] = v_proj - T(v_);
         return true;
     }
 
-
 private:
-    int   jid_;
+    int jid_;
     double u_, v_;
     smplx::Model<smplx::model_config::SMPL_v1>& model_;
 };
