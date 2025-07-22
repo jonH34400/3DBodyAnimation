@@ -1,3 +1,4 @@
+#Simple Script to preprocess npz model to work with avatar model
 import numpy as np
 
 model = np.load('../data/avatar-model/model.npz', allow_pickle=True)
