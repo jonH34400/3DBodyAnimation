@@ -22,7 +22,7 @@ The key component is an optimization loop using **Ceres Solver** to fit SMPL mod
 ## Requirements
 
 1. **C++ Dependencies**
-    - Ceres Solver
+    - Ceres Solver (1.14)
     - OpenCV
     - Open3D (optional, for better mesh visualization)
     - C++17 or newer
