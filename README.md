@@ -76,7 +76,7 @@ The repo already lists external dependencies in **.gitmodules** (`external/SMPLp
 ```bash
 git clone --recursive https://github.com/jonH34400/3DBodyAnimation.git
 cd 3DBodyAnimation
-git checkout ceres_autodiff 
+git checkout NewModel3
 git submodule update --init --recursive
 ```
 
@@ -106,7 +106,7 @@ assets/raw/
 
 
 ### 3 Preprocess `.npz` to `.npz`
-   Run scripts/smpl2npz.py
+   Run scripts/npz_fixer.py
 
 
 ## Preprocess model to `.json` (old)
@@ -120,8 +120,8 @@ assets/raw/
 ## Build & run
 ```bash
 mkdir build && cd build
-cmake ..
+cmake .. -DCeres_DIR="../external/install/ceres-1.14/lib/cmake/Ceres" -DCMAKE_BUILD_TYPE=Release -DWITH_OMP=ON
 make -j8
-./3dba
+./3dba ../data/avatar-model/ ../data/keypoints/video2/frame_0060.json ../data/frames_annotated/video2/frame_0060_annotated.png
 ```
 A successful build drops a `neutral_mesh.obj` T-pose.
