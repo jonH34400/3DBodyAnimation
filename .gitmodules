@@ -10,3 +10,6 @@
 [submodule "external/smplxpp"]
 	path = external/smplxpp
 	url = https://github.com/dengamusic/smplxpp.git
+[submodule "external/avatar"]
+	path = external/avatar
+	url = https://github.com/sxyu/avatar

@@ -4,9 +4,10 @@
 #include <vector>
 #include <opencv2/opencv.hpp>
 #include <ceres/ceres.h>
+#include "Avatar.h"
+#include "AvatarOptimizer.h"
 #include <nlohmann/json.hpp>
-#include <smplx/smplx.hpp>
-#include "OptimizeSMPL.hpp"
+#include "OptimizeSMPL.h"
 
 // ── MediaPipe-to-SMPL mapping ------------------------------------------
 static const int MP_MAP[24] = {
@@ -52,7 +53,7 @@ static const int BONES[][2] = {
         {16,17},{15,16},{15,17},        // head, shoulder
         {16,18},{17,19},{18,20},{19,21}, // arms
         {1,16},{2,17}
-    };
+};
 
 std::vector<PixelKP> load_mp(const std::string& json_path, int W, int H)
 {
@@ -102,36 +103,49 @@ std::vector<PixelKP> load_mp(const std::string& json_path, int W, int H)
     return out;
 }
 
-
-void overlay_smpl(const smplx::Body<smplx::model_config::SMPL_v1>& body,
-                  cv::Mat& img,
-                  double  scale,
-                  double  fx, double fy,
-                  double  cx, double cy,
-                  const cv::Scalar& color,
-                  int thickness = 2)
+// Assuming BONES is defined somewhere as an array of joint connections
+// Example: const std::array<std::array<int, 2>, 24> BONES = {...};
+void overlay_avatar(const ark::Avatar& avatar,
+                   cv::Mat& img,
+                   double scale,
+                   double fx, double fy,
+                   double cx, double cy,
+                   const cv::Scalar& color,
+                   int thickness = 2)
 {
-    // body.trans() already stores the optimised translation (metres)
-    const auto& T = body.trans();              // (tx, ty, tz)
+    // Get joint positions from avatar (3 x num_joints matrix)
+    const ark::CloudType& J = avatar.jointPos;
+    int num_joints = J.cols();
+    std::vector<cv::Point> proj(num_joints);
 
-    Eigen::MatrixXd J = body.joints().cast<double>();
-    std::array<cv::Point,24> proj;
+    // Avatar's root position is stored separately in p
+    const Eigen::Vector3d& T = avatar.p;
 
-    for (int i = 0; i < 24; ++i)
+    //std::cout << "overlay_avatar: num_joints = " << num_joints << "\n";
+
+    for (int i = 0; i < num_joints; ++i)
     {
-        // P_cam = s·P + T   -- exactly like the cost function
-        double Xc = scale * J(i,0) + T(0);
-        double Yc = scale * J(i,1) + T(1);
-        double Zc = scale * J(i,2) + T(2);
+        // P_cam = s·P + T
+        double Xc = scale * J(0, i) + T(0);
+        double Yc = scale * J(1, i) + T(1);
+        double Zc = scale * J(2, i) + T(2);
 
-        double u  = fx *  Xc / Zc + cx;
-        double v  = fy * -Yc / Zc + cy;   // flip Y once
+        if (Zc <= 0) {
+            std::cout << " → Joint behind camera, skipping.\n";
+            continue;
+        }
 
-        proj[i] = {int(u), int(v)};
+        // Perspective projection with Y flip
+        double u = fx * Xc / Zc + cx;
+        double v = fy * -Yc / Zc + cy;  // flip Y once
+
+        proj[i] = {static_cast<int>(u), static_cast<int>(v)};
     }
 
-    for (auto& b : BONES)
-        cv::line(img, proj[b[0]], proj[b[1]], color, thickness);
+    // Draw bones
+    for (auto& b : BONES) {
+        cv::line(img, proj[b[0]], proj[b[1]], color, thickness); 
+    }
 }
 
 void print_vec(const std::string& name,
@@ -161,7 +175,8 @@ int main(int argc, char** argv)
     }
 
     //------------------ load model -----------------------------------------
-    smplx::Model<smplx::model_config::SMPL_v1> model(argv[1]);
+    //smplx::Model<smplx::model_config::SMPL_v1> model(argv[1]); //SMPLx
+    ark::AvatarModel model_av(argv[1]); //Avatar
 
     //------------------ load image -----------------------------------------
     cv::Mat img = cv::imread(argv[3]);
@@ -181,60 +196,131 @@ int main(int argc, char** argv)
     std::cout << "Camera fx,fy: " << fx << ", " << fy << '\n'
               << "Camera cx,cy: " << cx << ", " << cy << '\n';
 
+    ark::CameraIntrin intrin;
+    intrin.fx = fx;
+    intrin.fy = fy;
+    intrin.cx = cx;
+    intrin.cy = cy;
+
     //------------------ key-point loading ---------------------------------
     auto kps = load_mp(argv[2], W, H);     // use real W,H
     std::cout << "keypoints used: " << kps.size() << '\n';
 
+    // Data Cloud estimate
+    Eigen::Matrix<double, 3, Eigen::Dynamic> dataCloud(3, kps.size());
+    double z = 3.0; // arbitrary depth
+    for (size_t i = 0; i < kps.size(); ++i) {
+        double x = (kps[i].u - cx) * z / fx;
+        double y = (kps[i].v - cy) * z / fy;
+        dataCloud(0, i) = x;
+        dataCloud(1, i) = y;
+        dataCloud(2, i) = z;
+    }
+
     //------------------ build initial body (all-zero pose) ----------------
-    smplx::Body<smplx::model_config::SMPL_v1> body0(model);
-    body0.set_zero();
-    body0.trans()(2) = 3.0;                // ~3 m from camera
-    body0.update();
+    ark::Avatar body0_av (model_av);
+    body0_av.w.setZero(model_av.numShapeKeys());
+    body0_av.p = Eigen::Vector3d(0, 0, 2.0);
+    body0_av.r.clear();
+    for (int i = 0; i < model_av.numJoints(); i++) {
+        body0_av.r.push_back(Eigen::Matrix3d::Identity());
+    }
+    body0_av.update();
 
     //------------------ draw initial overlay ------------------------------
-    cv::Mat img_init = img.clone();        // keep original clean
-    overlay_smpl(body0, img_init, 1.0, fx, fy, cx, cy, cv::Scalar(255,0,0));   // blue
+    cv::Mat img_init_av = img.clone();  
+    overlay_avatar(body0_av,img_init_av, 1.0, fx, fy, cx, cy, cv::Scalar(255,0,0)); 
 
-    for (auto& kp : kps)                                                   // green
-        cv::circle(img_init, {int(kp.u), int(kp.v)}, 3,
+    for (auto& kp : kps)                                                   
+        cv::circle(img_init_av, {int(kp.u), int(kp.v)}, 3,
                 cv::Scalar(0,255,0), -1);
 
-    cv::imwrite("out_init.png", img_init);
-    std::cout << "wrote out_init.png\n";
+    cv::imwrite("out_init_av.png", img_init_av);
+    std::cout << "wrote out_init_av.png\n";
 
-    //------------------ optimise SMPL + global scale ----------------------
-    SMPLFitResult R = optimize_smpl(kps, model);       // θ,β,trans,scale
 
-    print_vec("β (10)  ", R.beta, 10);
-    print_vec("θ (72)  ", R.theta, 72);   // first 12 shown
-    std::cout << "trans   [" << R.trans[0] << ", "
-                            << R.trans[1] << ", "
-                            << R.trans[2] << "]\n"
-            << "scale   " << R.scale << "\n";
+    //------------------ params for optimization ----------------------
+    std::map<int, int> jointToPart = {
+        {1, 1}, {2, 1},     // hips
+        {4, 2}, {5, 2},     // knees
+        {7, 3}, {8, 3},     // ankles
+        {15, 0},            // head
+        {16, 4}, {17, 4},   // shoulders
+        {18, 5}, {19, 5},   // elbows
+        {20, 6}, {21, 6}    // wrist
+    };
+    std::vector<int> partMap(model_av.numJoints(), 0);
+    for (const auto& [jid, part] : jointToPart) {
+        if (jid >= 0 && jid < model_av.numJoints()) {
+            partMap[jid] = part;
+        }
+    }
 
-    //------------------ build final body ----------------------------------
-    smplx::Body<smplx::model_config::SMPL_v1> body_opt(model);
-    using S = smplx::Scalar;
-    body_opt.shape().head<10>() =
-        Eigen::Map<const Eigen::Matrix<double,10,1>>(R.beta).template cast<S>();
-    body_opt.pose() =
-        Eigen::Map<const Eigen::Matrix<double,72,1>>(R.theta).template cast<S>();
-    body_opt.trans() =
-        Eigen::Map<const Eigen::Matrix<double,3,1>>(R.trans).template cast<S>();
-    body_opt.update();
+    Eigen::VectorXi dataPartLabels(kps.size());
+
+    for (size_t i = 0; i < kps.size(); ++i) {
+        int smpl_joint_id = kps[i].jid;
+
+        if (smpl_joint_id >= 0 && smpl_joint_id < partMap.size()) {
+            dataPartLabels(i) = partMap[smpl_joint_id];
+        } else {
+            std::cerr << "Warning: joint id " << smpl_joint_id << " fuera de rango\n";
+            dataPartLabels(i) = -1; // O manejar como prefieras
+        }
+    }
+
+    int numParts = *std::max_element(partMap.begin(), partMap.end()) + 1;
+
+    //------------------ some checking ----------------------
+    std::cout << "CHECKING...:\n";
+
+    // Check for right sizes
+    std::cout << "dataCloud.cols(): " << dataCloud.cols()
+          << ", dataPartLabels.size(): " << dataPartLabels.size() << std::endl;
+    
+    std::cout << "dataCloud.rows(): " << dataCloud.rows() << std::endl;
+    std::cout << "dataCloud.cols(): " << dataCloud.cols() << std::endl;
+
+    // Check for correct values in DataPartLabal
+    for (int i = 0; i < dataPartLabels.size(); i++)
+    {
+        std::cout << "Data Part Label[" << i << "] = " << dataPartLabels[i] << std::endl; 
+    }
+
+    // Check for correct values in DatCloud
+    for (int i = 0; i < dataCloud.cols(); ++i) {
+        for (int r = 0; r < 3; ++r) {
+            double val = dataCloud(r,i);
+            std::cout << "Data Cloud [" << r << "][" << i << "] = " << dataCloud(r,i) << std::endl; 
+            if (!std::isfinite(val)) {
+                std::cerr << "ERROR: dataCloud contains invalid value at (" << r << "," << i << "): " << val << std::endl;
+            }
+        }
+    }
+
+    std::cout << "Checks before optimize:\n";
+    std::cout << "- model numJoints: " << model_av.numJoints() << "\n";
+    std::cout << "- shape keys: " << model_av.numShapeKeys() << "\n";
+    std::cout << "- avatar.r.size(): " << body0_av.r.size() << "\n";
+    std::cout << "- avatar.w.size(): " << body0_av.w.size() << "\n";
+
+    //------------------ optimise body  ----------------------------------
+    ark::AvatarOptimizer optimizer(body0_av, intrin, cv::Size(W, H), numParts, partMap);
+    std::cout << "Avengers Unite\n";
+    optimizer.optimize(dataCloud, dataPartLabels,1,1);
+    std::cout << "Avengers -> WE MADE IT\n";
 
     //------------------ draw optimised overlay ----------------------------
-    cv::Mat img_opt = img.clone();
-    overlay_smpl(body_opt, img_opt, R.scale,
-                R.scale*fx, R.scale*fy, cx, cy,            // scaled intrinsics
-                cv::Scalar(0,0,255));                      // red
+    cv::Mat img_opt_av = img.clone();
+    overlay_avatar(body0_av,img_opt_av, 1.0, fx, fy, cx, cy, cv::Scalar(0,0,255)); 
 
-    for (auto& kp : kps)                                    // green again
-        cv::circle(img_opt, {int(kp.u), int(kp.v)}, 3,
+    for (auto& kp : kps)                                                   
+        cv::circle(img_opt_av, {int(kp.u), int(kp.v)}, 3,
                 cv::Scalar(0,255,0), -1);
 
-    cv::imwrite("out_opt.png", img_opt);
-    cv::waitKey(0);
+    cv::imwrite("out_opt_av.png", img_opt_av);
+    std::cout << "wrote out_opt_av.png\n";
+
     return 0;
 
 }
