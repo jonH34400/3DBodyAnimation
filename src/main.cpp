@@ -21,18 +21,18 @@ static const int MP_MAP[24] = {
 /* 7  l-ank  */  27,
 /* 8  r-ank  */  28,
 /* 9  spine03   */  -1,        
-/*10  l-toe */  32,
-/*11  r-toe */  31,
+/*10  l-toe */  31,
+/*11  r-toe */  32,
 /*12  neck   */  -1,           
 /*13  l-clr */  -1,
 /*14  r-clr */  -1,
 /*15  head   */  0,           
-/*16  l-sld  */  12,
-/*17  r-sld  */  11,
-/*18  l-elb */  14,
-/*19  r-elb */  13,
-/*20  l-wrst */  16,          
-/*21  r-wrst */  15,          
+/*16  l-sld  */  11,
+/*17  r-sld  */  12,
+/*18  l-elb */  13,
+/*19  r-elb */  14,
+/*20  l-wrst */  15,          
+/*21  r-wrst */  16,          
 /*22  l-palm  */  -1,          
 /*23  r-palm  */  -1           
 };
@@ -42,6 +42,7 @@ static const std::array<int,13> USE_SMPL = {
       1, 2,            // hips
       4, 5,             // knees
       7, 8,             // ankles
+      //10,11,            //toes
       15,                 // head
       16, 17,             // shoulders
       18, 19,             // elbows
@@ -49,7 +50,8 @@ static const std::array<int,13> USE_SMPL = {
 };
 
 static const int BONES[][2] = {
-        {1,2},{1,4},{2,5},{4,7},{5,8},        // legs
+        {1,2},{1,4},{2,5},{4,7},{5,8},  // legs
+        //{7,10},{8,11},       //toes 
         {16,17},{15,16},{15,17},        // head, shoulder
         {16,18},{17,19},{18,20},{19,21}, // arms
         {1,16},{2,17}
@@ -136,7 +138,7 @@ void overlay_avatar(const ark::Avatar& avatar,
         }
 
         // Perspective projection with Y flip
-        double u = fx * Xc / Zc + cx;
+        double u = fx * -Xc / Zc + cx;
         double v = fy * -Yc / Zc + cy;  // flip Y once
 
         proj[i] = {static_cast<int>(u), static_cast<int>(v)};
@@ -208,12 +210,12 @@ int main(int argc, char** argv)
 
     // Data Cloud estimate
     Eigen::Matrix<double, 3, Eigen::Dynamic> dataCloud(3, kps.size());
-    double z = 3.0; // arbitrary depth
+    double z = 2.0; // arbitrary depth
     for (size_t i = 0; i < kps.size(); ++i) {
         double x = (kps[i].u - cx) * z / fx;
         double y = (kps[i].v - cy) * z / fy;
         dataCloud(0, i) = x;
-        dataCloud(1, i) = y;
+        dataCloud(1, i) = -y;
         dataCloud(2, i) = z;
     }
 
@@ -249,6 +251,7 @@ int main(int argc, char** argv)
         {18, 5}, {19, 5},   // elbows
         {20, 6}, {21, 6}    // wrist
     };
+
     std::vector<int> partMap(model_av.numJoints(), 0);
     for (const auto& [jid, part] : jointToPart) {
         if (jid >= 0 && jid < model_av.numJoints()) {
@@ -264,8 +267,8 @@ int main(int argc, char** argv)
         if (smpl_joint_id >= 0 && smpl_joint_id < partMap.size()) {
             dataPartLabels(i) = partMap[smpl_joint_id];
         } else {
-            std::cerr << "Warning: joint id " << smpl_joint_id << " fuera de rango\n";
-            dataPartLabels(i) = -1; // O manejar como prefieras
+            std::cerr << "Warning: joint id " << smpl_joint_id << " out of range\n";
+            dataPartLabels(i) = -1; 
         }
     }
 
@@ -279,7 +282,6 @@ int main(int argc, char** argv)
           << ", dataPartLabels.size(): " << dataPartLabels.size() << std::endl;
     
     std::cout << "dataCloud.rows(): " << dataCloud.rows() << std::endl;
-    std::cout << "dataCloud.cols(): " << dataCloud.cols() << std::endl;
 
     // Check for correct values in DataPartLabal
     for (int i = 0; i < dataPartLabels.size(); i++)
@@ -298,7 +300,7 @@ int main(int argc, char** argv)
         }
     }
 
-    std::cout << "Checks before optimize:\n";
+    std::cout << "Checks before optimizing:\n";
     std::cout << "- model numJoints: " << model_av.numJoints() << "\n";
     std::cout << "- shape keys: " << model_av.numShapeKeys() << "\n";
     std::cout << "- avatar.r.size(): " << body0_av.r.size() << "\n";
@@ -306,9 +308,10 @@ int main(int argc, char** argv)
 
     //------------------ optimise body  ----------------------------------
     ark::AvatarOptimizer optimizer(body0_av, intrin, cv::Size(W, H), numParts, partMap);
-    std::cout << "Avengers Unite\n";
+
     optimizer.optimize(dataCloud, dataPartLabels,1,1);
-    std::cout << "Avengers -> WE MADE IT\n";
+    //body0_av.r[0] = Eigen::Matrix3d::Identity();
+    //body0_av.update();
 
     //------------------ draw optimised overlay ----------------------------
     cv::Mat img_opt_av = img.clone();
