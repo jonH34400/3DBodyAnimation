@@ -86,6 +86,7 @@ static std::vector<PixelKP> load_mp_json(const std::string& path, int W, int H) 
     return out;
 }
 
+// ---------------WRITES MESH OBJ-------------------
 static bool write_ply_ascii(const std::string& path,
                             const Eigen::Matrix<double,3,Eigen::Dynamic>& V,
                             const std::vector<std::array<int,3>>& F)
@@ -108,6 +109,7 @@ static bool write_ply_ascii(const std::string& path,
     return true;
 }
 
+//---------------2D SKELETON PROJECTION--------------------
 template <class AvatarT>
 void overlay_avatar(const AvatarT& avatar, cv::Mat& img,
                     double fx, double fy, double cx, double cy,
@@ -147,6 +149,28 @@ void overlay_avatar(const AvatarT& avatar, cv::Mat& img,
         }
     }
 }
+
+//----------------FULL MODEL 3DTO2D RENDERIZATION-----------
+void renderSMPLSilhouette( const Eigen::Matrix3Xd& cloud, cv::Mat& img,
+    double fx, double fy, double cx, double cy) {
+
+    std::vector<cv::Point> proj(cloud.cols(), cv::Point(-9999, -9999));
+    for (int i = 0; i < cloud.cols(); ++i) {
+        Eigen::Vector3d X = cloud.col(i);
+        if (X.z() <= 1e-6) continue;
+        double u = fx * X.x() / X.z() + cx;
+        double v = fy * X.y() / X.z() + cy;
+        proj[i] = { static_cast<int>(std::round(u)), static_cast<int>(std::round(v)) };
+        
+    }
+    for (int j = 0; j < cloud.cols(); ++j){
+        const auto& p = proj[j];
+        if (p.x != -9999 && p.y != -9999)
+            cv::circle(img, { p.x, p.y }, 3, cv::Scalar(0,0,255), -1);
+    }
+
+}
+
 
 // ---------- main ----------
 int main(int argc, char** argv)
@@ -254,10 +278,17 @@ int main(int argc, char** argv)
         overlay_avatar(body_av, img_opt, fx, fy, cx, cy,
                     sim3sol.scale(), aa_root,          // use optimized Sim3 scale
                     cv::Scalar(0,0,255), 2, BONES, (int)(sizeof(BONES)/sizeof(BONES[0])));
+        
+        // --- Render full 3D model and project on frame image after opt ---
+        cv::Mat color_overlay = img.clone();
+        renderSMPLSilhouette( body_av.cloud, color_overlay, fx, fy, cx, cy);
 
-        // Save alongside PLY with a matching name
+        // Save alongside PLY with a matching name and and 3D projection
         fs::path png_path = out_dir / (std::string("frame_") + std::to_string(i) + "_overlay.png");
+        fs::path render2d = out_dir / (std::string("frame_") + std::to_string(i) + "_render.png");
         cv::imwrite(png_path.string(), img_opt);
+        cv::imwrite(render2d.string(), color_overlay);
+
     }
 
     std::cout << "Done.\n";
