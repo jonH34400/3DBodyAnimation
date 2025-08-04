@@ -25,7 +25,7 @@ static const int MP_MAP[24] = {
     31, 32, -1, -1, -1, 0, 11, 12, 13, 14,
     15, 16, -1, -1
 };
-static const std::array<int,15> USE_SMPL = {
+static const std::array<int,17> USE_SMPL = {
     1, 2, 4, 5, 7, 8, 10, 11, 15, 16, 17, 18, 19, 20, 21
 };
 
@@ -218,7 +218,7 @@ int main(int argc, char** argv)
         for (const auto& kp : kps) valid_joint_ids.push_back(kp.jid);
 
         Sim3Params sim3init{};
-        sim3init.scale() = 1.0;
+        sim3init.scale() = 0.7;
         sim3init.aa_root()[0] = 0.0; sim3init.aa_root()[1] = 0.0; sim3init.aa_root()[2] = 0.0;
         sim3init.trans()[0] = body_av.p.x(); sim3init.trans()[1] = body_av.p.y(); sim3init.trans()[2] = body_av.p.z();
 
