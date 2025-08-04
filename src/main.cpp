@@ -5,16 +5,17 @@
 #include <opencv2/opencv.hpp>
 #include "Avatar.h"
 #include "AvatarOptimizer.h"
+#include "AvatarRenderer.h"
 #include "Sim3BA.h"
 #include <nlohmann/json.hpp>
 
 static const int MP_MAP[24] = {
-    -1, 23, 24, -1, 25, 26, -1, 27, 28, -1,
+    -1, 23, 24, -1, 25, 26, -1, 29, 30, -1,
     31, 32, -1, -1, -1, 0, 11, 12, 13, 14,
-    15, 16, -1, -1
+    15, 16, 19, 20
 };
-static const std::array<int,13> USE_SMPL = {
-    1, 2, 4, 5, 7, 8, 15, 16, 17, 18, 19, 20, 21
+static const std::array<int,17> USE_SMPL = {
+    1, 2, 4, 5, 7, 8, 10, 11, 15, 16, 17, 18, 19, 20, 21, 22, 23
 };
 static const int BONES[][2] = {
     {1,2},{1,4},{2,5},{4,7},{5,8},
@@ -100,6 +101,30 @@ void overlay_avatar(const AvatarT& avatar, cv::Mat& img,
     }
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+void renderSMPLSilhouette( const Eigen::Matrix3Xd& cloud, cv::Mat& img,
+    double fx, double fy, double cx, double cy) {
+
+    std::vector<cv::Point> proj(cloud.cols(), cv::Point(-9999, -9999));
+    for (int i = 0; i < cloud.cols(); ++i) {
+        Eigen::Vector3d X = cloud.col(i);
+        if (X.z() <= 1e-6) continue;
+        double u = fx * X.x() / X.z() + cx;
+        double v = fy * X.y() / X.z() + cy;
+        proj[i] = { static_cast<int>(std::round(u)), static_cast<int>(std::round(v)) };
+        
+    }
+    for (int j = 0; j < cloud.cols(); ++j){
+        const auto& p = proj[j];
+        if (p.x != -9999 && p.y != -9999)
+            cv::circle(img, { p.x, p.y }, 3, cv::Scalar(0,0,255), -1);
+    }
+
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
 int main(int argc, char** argv)
 {
     if (argc < 4) {
@@ -176,7 +201,7 @@ int main(int argc, char** argv)
     overlay_avatar(body0_av, img_init, fx, fy, cx, cy,
                    1.0, aa_identity,
                    cv::Scalar(255,0,0), 2, BONES, (int)(sizeof(BONES)/sizeof(BONES[0])));
-    cv::imwrite("../data/out/out_init_av.png", img_init);
+    cv::imwrite("out_init_a3.png", img_init);
     std::cout << "wrote out_init_av.png\n";
 
     // List of valid joint IDs we have observations for
@@ -211,7 +236,7 @@ int main(int argc, char** argv)
     overlay_avatar(body0_av, img_sim3, fx, fy, cx, cy,
                    sim3sol.scale(), sim3sol.aa_root(),
                    cv::Scalar(255,0,0), 2, BONES, (int)(sizeof(BONES)/sizeof(BONES[0])));
-    cv::imwrite("../data/out/out_sim3_av.png", img_sim3);
+    cv::imwrite("out_sim3_a3.png", img_sim3);
     std::cout << "wrote out_sim3_av.png\n";
 
     // Next, optimize full pose (all joint rotations) to align avatar joints to 2D keypoints
@@ -227,15 +252,27 @@ int main(int argc, char** argv)
 
     // Update avatar's joint positions after pose optimization
     body0_av.update();
+    
 
     // Draw final overlay (avatar in red aligned to person)
     cv::Mat img_opt = img.clone();
     double aa_final[3] = {0.0, 0.0, 0.0};  // avatar.r[0] already contains final root orientation
     overlay_avatar(body0_av, img_opt, fx, fy, cx, cy,
-                   sim3sol.scale(), aa_final,
+                   sim3sol.scale()*6000, aa_final,
                    cv::Scalar(0,0,255), 2, BONES, (int)(sizeof(BONES)/sizeof(BONES[0])));
-    cv::imwrite("../data/out/out_opt_av.png", img_opt);
+    cv::imwrite("out_opt_a3.png", img_opt);
     std::cout << "wrote out_opt_av.png\n";
+
+
+    // Full model renderization in 2D
+    cv::Mat rgb_img = cv::imread(argv[3]);  // Input image
+    cv::Mat color_overlay = rgb_img.clone();
+
+    renderSMPLSilhouette( body0_av.cloud, color_overlay, fx, fy, cx, cy);
+    
+    //color_overlay2.setTo(cv::Scalar(180, 180, 180), silhouette2);
+    cv::imwrite("Silhouette_Overlay.png", color_overlay);
+    std::cout << "wrote Silhouette_Overlay.png\n";
 
     return 0;
 }
