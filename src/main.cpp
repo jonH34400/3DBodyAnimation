@@ -1,21 +1,34 @@
+// main.cpp — single-frame SMPL fit per JSON, intrinsics sampled from an image
 #include <array>
 #include <fstream>
 #include <iostream>
 #include <vector>
+#include <string>
+#include <algorithm>
+#include <filesystem>
+#include <cstdio>
+
+#include <Eigen/Core>
 #include <opencv2/opencv.hpp>
-#include "Avatar.h"
-#include "AvatarOptimizer.h"
-#include "Sim3BA.h"
 #include <nlohmann/json.hpp>
 
+#include "Avatar.h"
+#include "AvatarOptimizer.h"
+#include "Sim3BA.h"   // your ORIGINAL OptimizeSim3Reprojection / OptimizePoseReprojection
+
+namespace fs = std::filesystem;
+using json = nlohmann::json;
+
+// ---------- MP → SMPL mapping (as before) ----------
 static const int MP_MAP[24] = {
     -1, 23, 24, -1, 25, 26, -1, 27, 28, -1,
     31, 32, -1, -1, -1, 0, 11, 12, 13, 14,
     15, 16, -1, -1
 };
-static const std::array<int,13> USE_SMPL = {
-    1, 2, 4, 5, 7, 8, 15, 16, 17, 18, 19, 20, 21
+static const std::array<int,15> USE_SMPL = {
+    1, 2, 4, 5, 7, 8, 10, 11, 15, 16, 17, 18, 19, 20, 21
 };
+
 static const int BONES[][2] = {
     {1,2},{1,4},{2,5},{4,7},{5,8},
     {16,17},{15,16},{15,17},
@@ -23,41 +36,76 @@ static const int BONES[][2] = {
     {1,16},{2,17}
 };
 
-std::vector<PixelKP> load_mp(const std::string& json_path, int W, int H)
-{
-    nlohmann::json j;
-    std::ifstream(json_path) >> j;
-    std::vector<PixelKP> out;
+// ---------- helpers ----------
+static bool has_ext(const fs::path& p, std::initializer_list<std::string> exts) {
+    auto e = p.extension().string();
+    std::transform(e.begin(), e.end(), e.begin(), ::tolower);
+    for (auto& x : exts) if (e == x) return true;
+    return false;
+}
+static std::vector<fs::path> list_sorted(const fs::path& dir, std::initializer_list<std::string> exts) {
+    std::vector<fs::path> v;
+    for (auto& p : fs::directory_iterator(dir))
+        if (p.is_regular_file() && has_ext(p.path(), exts)) v.push_back(p.path());
+    std::sort(v.begin(), v.end());
+    return v;
+}
+
+static std::vector<PixelKP> load_mp_json(const std::string& path, int W, int H) {
+    std::ifstream f(path);
+    if (!f) { std::cerr << "Cannot open " << path << "\n"; return {}; }
+    json j; f >> j;
 
     auto mid = [&](int a, int b) -> std::array<double,3> {
-        return { 0.5*(j[a]["x"].get<double>() + j[b]["x"].get<double>()),
-                 0.5*(j[a]["y"].get<double>() + j[b]["y"].get<double>()),
-                 std::min(j[a]["visibility"].get<double>(),
-                          j[b]["visibility"].get<double>()) };
+        return {
+            0.5*(j[a]["x"].get<double>() + j[b]["x"].get<double>()),
+            0.5*(j[a]["y"].get<double>() + j[b]["y"].get<double>()),
+            std::min(j[a].value("visibility", 0.0), j[b].value("visibility", 0.0))
+        };
     };
-
     const auto pelvis = mid(23, 24);
     const auto chest  = mid(11, 12);
 
+    std::vector<PixelKP> out;
+    out.reserve(USE_SMPL.size());
     for (int sid : USE_SMPL) {
         double x=0, y=0, vis=0;
         switch (sid) {
-        case 0: // pelvis (mid-hip)
-            x = pelvis[0];  y = pelvis[1];  vis = pelvis[2];  break;
-        case 6: // chest (mid-shoulder)
-            x = chest[0];   y = chest[1];   vis = chest[2];   break;
+        case 0: x=pelvis[0]; y=pelvis[1]; vis=pelvis[2]; break;
+        case 6: x=chest[0];  y=chest[1];  vis=chest[2];  break;
         default: {
             int mp = MP_MAP[sid];
             if (mp < 0) continue;
             x   = j[mp]["x"].get<double>();
             y   = j[mp]["y"].get<double>();
-            vis = j[mp]["visibility"].get<double>();
-        }
-        }
+            vis = j[mp].value("visibility", 1.0);
+        }}
         if (vis < 0.5) continue;
         out.push_back({ sid, x * W, y * H });
     }
     return out;
+}
+
+static bool write_ply_ascii(const std::string& path,
+                            const Eigen::Matrix<double,3,Eigen::Dynamic>& V,
+                            const std::vector<std::array<int,3>>& F)
+{
+    std::ofstream o(path);
+    if (!o) { std::cerr << "Cannot write " << path << "\n"; return false; }
+    const size_t nV = (size_t)V.cols();
+    const size_t nF = F.size();
+    o << "ply\nformat ascii 1.0\n";
+    o << "element vertex " << nV << "\n";
+    o << "property float x\nproperty float y\nproperty float z\n";
+    o << "element face " << nF << "\n";
+    o << "property list uchar int vertex_indices\n";
+    o << "end_header\n";
+    o.setf(std::ios::fixed); o.precision(6);
+    for (size_t i = 0; i < nV; ++i)
+        o << (float)V(0,(int)i) << " " << (float)V(1,(int)i) << " " << (float)V(2,(int)i) << "\n";
+    for (const auto& f : F)
+        o << "3 " << f[0] << " " << f[1] << " " << f[2] << "\n";
+    return true;
 }
 
 template <class AvatarT>
@@ -100,142 +148,118 @@ void overlay_avatar(const AvatarT& avatar, cv::Mat& img,
     }
 }
 
+// ---------- main ----------
 int main(int argc, char** argv)
 {
-    if (argc < 4) {
-        std::cout << "usage: 3dba <SMPL.npz> <mp.json> <image.png> [max_iters]\n";
+    if (argc < 5) {
+        std::cout << "usage: 3dba <SMPL.npz> <kps_folder> <images_folder> <out_dir> [max_iters=100]\n";
         return 0;
     }
+    const std::string smpl_path = argv[1];
+    const fs::path kps_folder   = argv[2];
+    const fs::path img_folder   = argv[3];
+    const fs::path out_dir      = argv[4];
+    const int max_iters         = (argc > 5) ? std::atoi(argv[5]) : 100;
 
-    // Load SMPL avatar model
-    ark::AvatarModel model_av(argv[1]);
+    fs::create_directories(out_dir);
 
-    // Load input image
-    cv::Mat img = cv::imread(argv[3]);
-    if (img.empty()) {
-        std::cerr << "cannot read image\n";
-        return 1;
-    }
-    int max_iters = (argc > 4) ? std::atoi(argv[4]) : 100;
-    const int W = img.cols, H = img.rows;
+    // 1) Sample H/W and intrinsics from the first image in the directory
+    auto images = list_sorted(img_folder, {".png",".jpg",".jpeg",".bmp"});
+    if (images.empty()) { std::cerr << "No images in " << img_folder << "\n"; return 1; }
+    cv::Mat img0 = cv::imread(images.front().string());
+    if (img0.empty()) { std::cerr << "Failed to read " << images.front() << "\n"; return 1; }
 
-    // Camera intrinsics
+    const int W = img0.cols, H = img0.rows;
+    // Camera intrinsics (same heuristic you showed)
     double fx = 0.9 * W;
     double fy = fx;
     double cx = 0.5 * W;
     double cy = 0.5 * H;
-    ark::CameraIntrin intrin(cv::Vec4d(fx, fy, cx, cy));
-    // Load 2D keypoints from MediaPipe JSON
-    auto kps = load_mp(argv[2], W, H);
-    std::cout << "keypoints used: " << kps.size() << '\n';
-    for (const auto& kp : kps) {
-        std::cout << "jid: " << kp.jid << ", u: " << kp.u << ", v: " << kp.v << '\n';
+
+    // 2) List JSON keypoints
+    auto jsons = list_sorted(kps_folder, {".json"});
+    if (jsons.empty()) { std::cerr << "No JSON files in " << kps_folder << "\n"; return 1; }
+
+    // 3) Load SMPL
+    ark::AvatarModel model_av(smpl_path);
+    const int nJ = model_av.numJoints();
+    std::vector<std::array<int,3>> faces;
+    faces.reserve(model_av.numFaces());
+    for (int i = 0; i < model_av.mesh.cols(); ++i) {
+        faces.push_back({ model_av.mesh(0, i), model_av.mesh(1, i), model_av.mesh(2, i) });
     }
 
-    // Map certain SMPL joints to body part indices (for possible use in part-based algorithms)
-    std::map<int, int> jointToPart = {
-        {1,1},{2,1},{4,2},{5,2},{7,3},{8,3},
-        {15,0},{16,4},{17,4},{18,5},{19,5},{20,6},{21,6}
-    };
-    std::vector<int> partMap(model_av.numJoints(), 0);
-    for (const auto& [jid, part] : jointToPart) {
-        if (jid >= 0 && jid < model_av.numJoints()) {
-            partMap[jid] = part;
+    // 4) Process each frame independently
+    for (size_t i = 0; i < jsons.size(); ++i) {
+        // --- read the matching image ---
+        if (i >= images.size()) { std::cerr << "No image for frame " << i << "\n"; break; }
+        cv::Mat img = cv::imread(images[i].string());
+        if (img.empty()) { std::cerr << "Failed to read " << images[i] << "\n"; continue; }
+
+        // Load keypoints
+        auto kps = load_mp_json(jsons[i].string(), W, H);
+        if (kps.empty()) {
+            std::cerr << "Frame " << i << " has no valid keypoints; skipping.\n";
+            continue;
         }
+
+        // Build default avatar (facing camera)
+        ark::Avatar body_av(model_av);
+        body_av.w.setZero(model_av.numShapeKeys());
+        body_av.p = Eigen::Vector3d(0,0,3.0);
+        body_av.r.assign(nJ, Eigen::Matrix3d::Identity());
+        Eigen::Matrix3d flipY = Eigen::Matrix3d::Identity(); flipY(1,1) = -1;
+        // Eigen::AngleAxisd yaw_pi(M_PI, Eigen::Vector3d::UnitY());
+        // body_av.r[0] = yaw_pi.toRotationMatrix() * flipY;
+        body_av.update();
+
+        // Sim3 init from joints
+        std::vector<int> valid_joint_ids; valid_joint_ids.reserve(kps.size());
+        for (const auto& kp : kps) valid_joint_ids.push_back(kp.jid);
+
+        Sim3Params sim3init{};
+        sim3init.scale() = 1.0;
+        sim3init.aa_root()[0] = 0.0; sim3init.aa_root()[1] = 0.0; sim3init.aa_root()[2] = 0.0;
+        sim3init.trans()[0] = body_av.p.x(); sim3init.trans()[1] = body_av.p.y(); sim3init.trans()[2] = body_av.p.z();
+
+        auto [sim3sol, rep1] = OptimizeSim3Reprojection(
+            body_av.jointPos, kps, fx, fy, cx, cy, valid_joint_ids, &sim3init, max_iters
+        );
+
+        // Apply translation (scale stays separate for projection)
+        body_av.p = Eigen::Vector3d(sim3sol.trans()[0], sim3sol.trans()[1], sim3sol.trans()[2]);
+        body_av.update();
+
+        // Full pose optimization
+        auto [ok, rep2] = OptimizePoseReprojection(
+            model_av, body_av, kps, fx, fy, cx, cy, valid_joint_ids, sim3sol, max_iters,
+            /*betaPose=*/3.0,   // tune
+            /*betaShape=*/0.05, // tune
+            /*gmmPosePrior=*/nullptr
+        );
+        body_av.update();
+
+        // Write PLY
+        char name[256]; std::snprintf(name, sizeof(name), "frame_%06zu.ply", i);
+        fs::path ply_path = out_dir / name;
+        if (!write_ply_ascii(ply_path.string(), body_av.cloud, faces)) {
+            std::cerr << "Failed to write " << ply_path << "\n";
+        } else {
+            std::cout << "Wrote " << ply_path << (ok ? "" : " (solver warning)") << "\n";
+        }
+
+        // --- overlay on the same frame image, after optimization ---
+        cv::Mat img_opt = img.clone();
+        const double* aa_root = nullptr;                  // no extra rotation; root pose already in body_av
+        overlay_avatar(body_av, img_opt, fx, fy, cx, cy,
+                    sim3sol.scale(), aa_root,          // use optimized Sim3 scale
+                    cv::Scalar(0,0,255), 2, BONES, (int)(sizeof(BONES)/sizeof(BONES[0])));
+
+        // Save alongside PLY with a matching name
+        fs::path png_path = out_dir / (std::string("frame_") + std::to_string(i) + "_overlay.png");
+        cv::imwrite(png_path.string(), img_opt);
     }
 
-    // Filter keypoints to those with known part mapping
-    std::vector<int> keep;
-    keep.reserve(kps.size());
-    for (size_t i = 0; i < kps.size(); ++i) {
-        int jid = kps[i].jid;
-        int part = (jid >= 0 && jid < (int)partMap.size()) ? partMap[jid] : -1;
-        if (part >= 0) keep.push_back((int)i);
-    }
-
-    // Initialize avatar in default pose, facing the camera
-    ark::Avatar body0_av(model_av);
-    body0_av.w.setZero(model_av.numShapeKeys());
-    body0_av.p = Eigen::Vector3d(0, 0, 3.0);
-    body0_av.r.clear();
-    body0_av.r.resize(model_av.numJoints(), Eigen::Matrix3d::Identity());
-    // Apply coordinate system adjustments: flip Y axis and yaw 180° so model faces camera
-    Eigen::Matrix3d flipY = Eigen::Matrix3d::Identity();
-    flipY(1,1) = -1;
-    body0_av.r[0] = flipY;
-    Eigen::AngleAxisd yaw_pi(M_PI, Eigen::Vector3d::UnitY());
-    body0_av.r[0] = yaw_pi.toRotationMatrix() * body0_av.r[0];
-    body0_av.update();
-
-    // Draw initial overlay (avatar in blue, keypoints in green)
-    cv::Mat img_init = img.clone();
-    for (auto& kp : kps) {
-        cv::circle(img_init, { (int)kp.u, (int)kp.v }, 3, cv::Scalar(0,255,0), -1);
-    }
-    double aa_identity[3] = {0.0, 0.0, 0.0};
-    overlay_avatar(body0_av, img_init, fx, fy, cx, cy,
-                   1.0, aa_identity,
-                   cv::Scalar(255,0,0), 2, BONES, (int)(sizeof(BONES)/sizeof(BONES[0])));
-    cv::imwrite("../data/out/out_init_av.png", img_init);
-    std::cout << "wrote out_init_av.png\n";
-
-    // List of valid joint IDs we have observations for
-    std::vector<int> valid_joint_ids;
-    valid_joint_ids.reserve(kps.size());
-    for (const auto& kp : kps) valid_joint_ids.push_back(kp.jid);
-
-    // First, optimize a global Sim3 (scale, root rotation, translation) to roughly align avatar to keypoints
-    Sim3Params initSim3;
-    initSim3.scale() = 1.0;
-    initSim3.aa_root()[0] = initSim3.aa_root()[1] = initSim3.aa_root()[2] = 0.0;
-    initSim3.trans()[0] = body0_av.p.x();
-    initSim3.trans()[1] = body0_av.p.y();
-    initSim3.trans()[2] = body0_av.p.z();
-
-    auto [sim3sol, sim3report] = OptimizeSim3Reprojection(
-        body0_av.jointPos, kps, fx, fy, cx, cy, valid_joint_ids, &initSim3, max_iters
-    );
-    std::cout << sim3report << "\n";
-    std::cout << "Solved scale: " << sim3sol.scale()
-              << " | root aa: [" << sim3sol.aa_root()[0] << ", "
-              << sim3sol.aa_root()[1] << ", " << sim3sol.aa_root()[2] << "]"
-              << " | T: [" << sim3sol.trans()[0] << ", "
-              << sim3sol.trans()[1] << ", " << sim3sol.trans()[2] << "]\n";
-
-    // Apply the solved translation to the avatar (so the avatar is roughly at correct position)
-    body0_av.p = Eigen::Vector3d(sim3sol.trans()[0], sim3sol.trans()[1], sim3sol.trans()[2]);
-    body0_av.update();
-
-    // Save an image of avatar after global alignment (for reference)
-    cv::Mat img_sim3 = img.clone();
-    overlay_avatar(body0_av, img_sim3, fx, fy, cx, cy,
-                   sim3sol.scale(), sim3sol.aa_root(),
-                   cv::Scalar(255,0,0), 2, BONES, (int)(sizeof(BONES)/sizeof(BONES[0])));
-    cv::imwrite("../data/out/out_sim3_av.png", img_sim3);
-    std::cout << "wrote out_sim3_av.png\n";
-
-    // Next, optimize full pose (all joint rotations) to align avatar joints to 2D keypoints
-    auto [poseSuccess, poseReport] = OptimizePoseReprojection(
-        model_av, body0_av, kps, fx, fy, cx, cy, valid_joint_ids, sim3sol, max_iters
-    );
-    std::cout << poseReport << "\n";
-    std::cout << "Solved pose scale: " << sim3sol.scale()
-              << " | root aa: [" << sim3sol.aa_root()[0] << ", "
-              << sim3sol.aa_root()[1] << ", " << sim3sol.aa_root()[2] << "]"
-              << " | T: [" << sim3sol.trans()[0] << ", "
-              << sim3sol.trans()[1] << ", " << sim3sol.trans()[2] << "]\n";
-
-    // Update avatar's joint positions after pose optimization
-    body0_av.update();
-
-    // Draw final overlay (avatar in red aligned to person)
-    cv::Mat img_opt = img.clone();
-    double aa_final[3] = {0.0, 0.0, 0.0};  // avatar.r[0] already contains final root orientation
-    overlay_avatar(body0_av, img_opt, fx, fy, cx, cy,
-                   sim3sol.scale(), aa_final,
-                   cv::Scalar(0,0,255), 2, BONES, (int)(sizeof(BONES)/sizeof(BONES[0])));
-    cv::imwrite("../data/out/out_opt_av.png", img_opt);
-    std::cout << "wrote out_opt_av.png\n";
-
+    std::cout << "Done.\n";
     return 0;
 }

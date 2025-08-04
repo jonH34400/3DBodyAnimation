@@ -189,6 +189,119 @@ struct ReprojCostFull {
     const int nJ_;
 };
 
+// ===== Pose prior over non-root joints (angle-axis, 3 per joint) =====
+// If you have a GaussianMixture prior, pass it in; otherwise pass nullptr and
+// we use an L2 fallback (betaPose * aa).
+struct PosePriorAAAnalytic : ceres::CostFunction {
+    // GaussianMixture must expose:
+    //  - VectorXd residual(const VectorXd&, int* compIdx)   // Mahalanobis residual stacked (3*N + 1)
+    //  - std::vector<MatrixXd> prec_cho;                    // L s.t. Precision = L * L^T
+    struct GaussianMixture {
+        // Minimal interface placeholder; replace with your real type if available.
+        Eigen::VectorXd residual(const Eigen::VectorXd&, int* compIdx) const { *compIdx = 0; return Eigen::VectorXd(); }
+        std::vector<Eigen::MatrixXd> prec_cho;
+        bool valid = false;
+    };
+
+    PosePriorAAAnalytic(int nNonRootJoints, double beta_pose,
+                        const GaussianMixture* gmm_prior = nullptr)
+        : nJ_(nNonRootJoints),
+          betaPose_(beta_pose),
+          gmm_(gmm_prior) 
+    {
+        // Residuals: 3 per joint (+1 if using GMM for the mixture constant)
+        const int nRes = gmm_ && gmm_->valid ? (nJ_ * 3 + 1) : (nJ_ * 3);
+        set_num_residuals(nRes);
+        auto* sizes = mutable_parameter_block_sizes();
+        for (int i = 0; i < nJ_; ++i) sizes->push_back(3); // angle-axis per non-root joint
+    }
+
+    bool Evaluate(double const* const* parameters, double* residuals,
+                  double** jacobians) const final
+    {
+        const bool use_gmm = (gmm_ && gmm_->valid);
+        const int nRes = use_gmm ? (nJ_ * 3 + 1) : (nJ_ * 3);
+
+        // Stack AA into a single vector x \in R^{3*nJ}
+        Eigen::VectorXd x(3 * nJ_);
+        for (int j = 0; j < nJ_; ++j) {
+            x.segment<3>(3*j) = Eigen::Map<const Eigen::Vector3d>(parameters[j]);
+        }
+
+        int compIdx = 0;
+        Eigen::Map<Eigen::VectorXd> r(residuals, nRes);
+
+        if (use_gmm) {
+            // GMM Mahalanobis residual (already whitened by component precision)
+            r.noalias() = gmm_->residual(x, &compIdx) * betaPose_;
+        } else {
+            // Simple L2 prior: r = beta * x  (no +1 row)
+            r.head(3*nJ_).noalias() = x * betaPose_;
+        }
+
+        if (jacobians) {
+            if (use_gmm) {
+                const Eigen::MatrixXd& L = gmm_->prec_cho[compIdx];
+                // Precision = L * L^T ; residual ~ L^T * (x - mu) with scaling baked into residual()
+                for (int j = 0; j < nJ_; ++j) {
+                    if (jacobians[j]) {
+                        // Each block is (nRes x 3); fill top (3*nJ_) rows; last row (mixture const) is zero.
+                        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 3, Eigen::RowMajor>> J(jacobians[j], nRes, 3);
+                        J.setZero();
+                        // Take the 3 rows of L corresponding to this joint, transpose them
+                        // (implementation detail depends on how residual() is formed; this matches the
+                        // typical "whitened" residual stacking by joints).
+                        J.topRows(3*nJ_).noalias() =
+                            L.middleRows(3*j, 3).transpose() * betaPose_;
+                    }
+                }
+            } else {
+                // d(beta * x)/d x_j = beta * I_3
+                for (int j = 0; j < nJ_; ++j) {
+                    if (jacobians[j]) {
+                        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 3, Eigen::RowMajor>> J(jacobians[j], nRes, 3);
+                        J.setZero();
+                        J.topRows(3*nJ_).block(3*j, 0, 3, 3).setIdentity();
+                        J.topRows(3*nJ_) *= betaPose_;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    const int nJ_;
+    const double betaPose_;
+    const GaussianMixture* gmm_; // optional
+};
+
+// ===== Shape prior: L2 on shape coefficients w =====
+struct ShapePriorL2Analytic : ceres::CostFunction {
+    ShapePriorL2Analytic(int num_shape_keys, double beta_shape)
+        : nS_(num_shape_keys), betaShape_(beta_shape)
+    {
+        set_num_residuals(nS_);
+        mutable_parameter_block_sizes()->push_back(nS_);
+    }
+
+    bool Evaluate(double const* const* parameters, double* residuals,
+                  double** jacobians) const final
+    {
+        Eigen::Map<Eigen::VectorXd> r(residuals, nS_);
+        Eigen::Map<const Eigen::VectorXd> w(parameters[0], nS_);
+        r.noalias() = w * betaShape_;
+        if (jacobians && jacobians[0]) {
+            Eigen::Map<Eigen::MatrixXd> J(jacobians[0], nS_, nS_);
+            J.setZero();
+            J.diagonal().setConstant(betaShape_);
+        }
+        return true;
+    }
+    const int nS_;
+    const double betaShape_;
+};
+
+
 
 inline std::pair<bool, std::string>
 OptimizePoseReprojection(const ark::AvatarModel& model,
@@ -197,7 +310,10 @@ OptimizePoseReprojection(const ark::AvatarModel& model,
                          double fx, double fy, double cx, double cy,
                          const std::vector<int>& valid_joint_ids,
                          Sim3Params& initSim3,
-                         int max_iters = 100)
+                         int max_iters = 100,
+                         double betaPose = 0.0,   // e.g., 1.0 … 10.0
+                         double betaShape = 0.0,  // e.g., 1e-2 … 1e-1
+                         const PosePriorAAAnalytic::GaussianMixture* gmmPosePrior = nullptr)
 {
     int nJ = model.numJoints();
     // Prepare parent index array
@@ -277,16 +393,6 @@ OptimizePoseReprojection(const ark::AvatarModel& model,
         // Add residual
         problem.AddResidualBlock(cost, loss, params);
 
-        // problem.AddResidualBlock(cost, loss,
-        //     &scale, 
-        //     rootAA, 
-        //     rootTrans,
-        //     jointAA[1].data(), jointAA[2].data(), jointAA[3].data(), jointAA[4].data(),
-        //     jointAA[5].data(), jointAA[6].data(), jointAA[7].data(), jointAA[8].data(),
-        //     jointAA[9].data(), jointAA[10].data(), jointAA[11].data(), jointAA[12].data(),
-        //     jointAA[13].data(), jointAA[14].data(), jointAA[15].data(), jointAA[16].data(),
-        //     jointAA[17].data(), jointAA[18].data(), jointAA[19].data(), jointAA[20].data(),
-        //     jointAA[21].data(), jointAA[22].data(), jointAA[23].data());
     }
 
     // Fix joints that have no observations (e.g., feet and hands not observed by MediaPipe)
@@ -297,6 +403,30 @@ OptimizePoseReprojection(const ark::AvatarModel& model,
     // Bound scale to a reasonable range
     problem.SetParameterLowerBound(&scale, 0, 0.3);
     problem.SetParameterUpperBound(&scale, 0, 3.0);
+
+    if (betaPose > 0.0) {
+        const int nNonRoot = std::max(0, nJ - 1);
+        auto* posePrior = new PosePriorAAAnalytic(nNonRoot, betaPose, gmmPosePrior);
+
+        // Build the parameter block pointer list in the SAME order as functor expects:
+        // [ jointAA[1], jointAA[2], ..., jointAA[nJ-1] ]
+        std::vector<double*> poseBlocks; poseBlocks.reserve(nNonRoot);
+        for (int j = 1; j < nJ; ++j) poseBlocks.push_back(jointAA[j].data());
+
+        problem.AddResidualBlock(posePrior, /*loss=*/nullptr, poseBlocks);
+    }
+
+    // (C) Shape prior on avatar.w (if you want to optimize shape here)
+    //     Add shape parameter block once; the same block participates in all residuals.
+    if (betaShape > 0.0) {
+        const int nS = static_cast<int>(avatar.w.size());
+        if (nS > 0) {
+            // Make sure avatar.w.data() is a parameter block
+            problem.AddParameterBlock(avatar.w.data(), nS);
+            auto* shapePrior = new ShapePriorL2Analytic(nS, betaShape);
+            problem.AddResidualBlock(shapePrior, /*loss=*/nullptr, avatar.w.data());
+        }
+    }
 
     // Solve full pose optimization
     ceres::Solver::Options opts;
