@@ -1,15 +1,3 @@
-[submodule "external/SMPLpp"]
-	path = external/SMPLpp
-	url = https://github.com/dengamusic/SMPLpp.git
-[submodule "external/xtensor"]
-	path = external/xtensor
-	url = https://github.com/xtensor-stack/xtensor.git
-[submodule "external/xtl"]
-	path = external/xtl
-	url = https://github.com/xtensor-stack/xtl.git
-[submodule "external/smplxpp"]
-	path = external/smplxpp
-	url = https://github.com/dengamusic/smplxpp.git
 [submodule "external/avatar"]
 	path = external/avatar
 	url = https://github.com/sxyu/avatar
