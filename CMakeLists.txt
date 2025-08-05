@@ -35,6 +35,7 @@ target_include_directories(3dba PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/external/avatar/include
     ${CMAKE_CURRENT_BINARY_DIR}/external/avatar/include
+    ${CERES_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
 )
 
