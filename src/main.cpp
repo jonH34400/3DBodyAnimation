@@ -14,7 +14,7 @@
 
 #include "Avatar.h"
 #include "AvatarOptimizer.h"
-#include "Sim3BA.h"   // your ORIGINAL OptimizeSim3Reprojection / OptimizePoseReprojection
+#include "optimization.h"  
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -241,47 +241,35 @@ int main(int argc, char** argv)
         std::vector<int> valid_joint_ids; valid_joint_ids.reserve(kps.size());
         for (const auto& kp : kps) valid_joint_ids.push_back(kp.jid);
 
-        Sim3Params sim3init{};
-        sim3init.scale() = 0.7;
-        sim3init.aa_root()[0] = 0.0; sim3init.aa_root()[1] = 0.0; sim3init.aa_root()[2] = 0.0;
-        sim3init.trans()[0] = body_av.p.x(); sim3init.trans()[1] = body_av.p.y(); sim3init.trans()[2] = body_av.p.z();
+        double s_opt = 1.0;
+        double Raa_opt[3] = {0,0,0};
+        double t_opt[3] = { body_av.p.x(), body_av.p.y(), body_av.p.z() };
 
-        auto [sim3sol, rep1] = OptimizeSim3Reprojection(
-            body_av.jointPos, kps, fx, fy, cx, cy, valid_joint_ids, &sim3init, max_iters
+        auto [ok, report] = unified_ad::OptimizeAllReprojection_AutoDiff(
+            model_av, body_av, kps, fx, fy, cx, cy,
+            valid_joint_ids, max_iters,
+            &s_opt, Raa_opt, t_opt
         );
 
-        // Apply translation (scale stays separate for projection)
-        body_av.p = Eigen::Vector3d(sim3sol.trans()[0], sim3sol.trans()[1], sim3sol.trans()[2]);
-        body_av.update();
+       // body_av.update();
 
-        // Full pose optimization
-        auto [ok, rep2] = OptimizePoseReprojection(
-            model_av, body_av, kps, fx, fy, cx, cy, valid_joint_ids, sim3sol, max_iters,
-            /*betaPose=*/3.0,   // tune
-            /*betaShape=*/0.05, // tune
-            /*gmmPosePrior=*/nullptr
-        );
-        body_av.update();
+        // // Write PLY
+        // char name[256]; std::snprintf(name, sizeof(name), "frame_%06zu.ply", i);
+        // fs::path ply_path = out_dir / name;
+        // if (!write_ply_ascii(ply_path.string(), body_av.cloud, faces)) {
+        //     std::cerr << "Failed to write " << ply_path << "\n";
+        // } else {
+        //     std::cout << "Wrote " << ply_path << (ok ? "" : " (solver warning)") << "\n";
+        // }
 
-        // Write PLY
-        char name[256]; std::snprintf(name, sizeof(name), "frame_%06zu.ply", i);
-        fs::path ply_path = out_dir / name;
-        if (!write_ply_ascii(ply_path.string(), body_av.cloud, faces)) {
-            std::cerr << "Failed to write " << ply_path << "\n";
-        } else {
-            std::cout << "Wrote " << ply_path << (ok ? "" : " (solver warning)") << "\n";
-        }
-
-        // --- overlay on the same frame image, after optimization ---
         cv::Mat img_opt = img.clone();
-        const double* aa_root = nullptr;                  // no extra rotation; root pose already in body_av
         overlay_avatar(body_av, img_opt, fx, fy, cx, cy,
-                    sim3sol.scale(), aa_root,          // use optimized Sim3 scale
+                    s_opt, /*aa_root=*/Raa_opt,
                     cv::Scalar(0,0,255), 2, BONES, (int)(sizeof(BONES)/sizeof(BONES[0])));
-        
-        // --- Render full 3D model and project on frame image after opt ---
+
+        // body_av.cloud/body updated from avatar_io.update() above
         cv::Mat color_overlay = img.clone();
-        renderSMPLSilhouette( body_av.cloud, color_overlay, fx, fy, cx, cy);
+        renderSMPLSilhouette( body_av.cloud, color_overlay, fx, fy, cx, cy );
 
         // Save alongside PLY with a matching name and and 3D projection
         fs::path png_path = out_dir / (std::string("frame_") + std::to_string(i) + "_overlay.png");
