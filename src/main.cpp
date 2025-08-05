@@ -213,6 +213,13 @@ int main(int argc, char** argv)
         faces.push_back({ model_av.mesh(0, i), model_av.mesh(1, i), model_av.mesh(2, i) });
     }
 
+    // 3.1) Intialiaze Avatar in T-pose
+    ark::Avatar body_avPrev(model_av);
+    body_avPrev.w.setZero(model_av.numShapeKeys());
+    body_avPrev.p = Eigen::Vector3d(0,0,3.0);
+    body_avPrev.r.assign(nJ, Eigen::Matrix3d::Identity());
+    body_avPrev.update();
+
     // 4) Process each frame independently
     for (size_t i = 0; i < jsons.size(); ++i) {
         // --- read the matching image ---
@@ -227,11 +234,11 @@ int main(int argc, char** argv)
             continue;
         }
 
-        // Build default avatar (facing camera)
+        // Build default avatar based on previous iteration (facing camera)
         ark::Avatar body_av(model_av);
-        body_av.w.setZero(model_av.numShapeKeys());
-        body_av.p = Eigen::Vector3d(0,0,3.0);
-        body_av.r.assign(nJ, Eigen::Matrix3d::Identity());
+        body_av.w = body_avPrev.w;
+        body_av.p = body_avPrev.p;
+        body_av.r = body_avPrev.r;
         Eigen::Matrix3d flipY = Eigen::Matrix3d::Identity(); flipY(1,1) = -1;
         // Eigen::AngleAxisd yaw_pi(M_PI, Eigen::Vector3d::UnitY());
         // body_av.r[0] = yaw_pi.toRotationMatrix() * flipY;
@@ -289,6 +296,11 @@ int main(int argc, char** argv)
         cv::imwrite(png_path.string(), img_opt);
         cv::imwrite(render2d.string(), color_overlay);
 
+        // Update previous avatar
+        body_avPrev.w = body_av.w;
+        body_avPrev.p = body_av.p;
+        body_avPrev.r = body_av.r;
+        body_avPrev.update();
     }
 
     std::cout << "Done.\n";
