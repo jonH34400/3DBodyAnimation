@@ -27,7 +27,7 @@ static const int MP_MAP[24] = {
     15, 16, -1, -1
 };
 static const std::array<int,17> USE_SMPL = {
-    1, 2, 4, 5, 7, 8, 10, 11, 15, 16, 17, 18, 19, 20, 21
+    1, 2, 4, 5, 7, 8, 10, 11, 15, 16, 17, 18, 19, 20, 21,0 ,6
 };
 
 static const int BONES[][2] = {
@@ -245,11 +245,6 @@ int main(int argc, char** argv)
         std::vector<int> valid_joint_ids; valid_joint_ids.reserve(kps.size());
         for (const auto& kp : kps) valid_joint_ids.push_back(kp.jid);
 
-        // toggle
-        const bool USE_SIM3 = false;
-
-        // 1) Build an identity Sim3 (used when Sim3 is deactivated)
-        // Prepare initial Sim3 (scale=1, no extra root rotation, initial translation from avatar.p)
         Sim3Params sim3_id{};
         sim3_id.scale() = 1.0;
         sim3_id.aa_root()[0] = sim3_id.aa_root()[1] = sim3_id.aa_root()[2] = 0.0;
@@ -266,10 +261,10 @@ int main(int argc, char** argv)
 
 
         // 5) Overlays (use sim3_use.scale()==1 when Sim3 is off)
-        cv::Mat img_opt = img.clone();
-        overlay_avatar(body_av, img_opt, fx, fy, cx, cy,
-                    sim3_id.scale(), /*aa_root*/nullptr,
-                    cv::Scalar(0,0,255), 2, BONES, (int)(sizeof(BONES)/sizeof(BONES[0])));
+        // cv::Mat img_opt = img.clone();
+        // overlay_avatar(body_av, img_opt, fx, fy, cx, cy,
+        //             sim3_id.scale(), /*aa_root*/nullptr,
+        //             cv::Scalar(0,0,255), 2, BONES, (int)(sizeof(BONES)/sizeof(BONES[0])));
 
         
         // --- Render full 3D model and project on frame image after opt ---
@@ -280,9 +275,9 @@ int main(int argc, char** argv)
 
 
         // Save alongside PLY with a matching name and and 3D projection
-        fs::path png_path = out_dir / (std::string("frame_") + std::to_string(i) + "_overlay.png");
+        //fs::path png_path = out_dir / (std::string("frame_") + std::to_string(i) + "_overlay.png");
         fs::path render2d = out_dir / (std::string("frame_") + std::to_string(i) + "_render.png");
-        cv::imwrite(png_path.string(), img_opt);
+        //cv::imwrite(png_path.string(), img_opt);
         cv::imwrite(render2d.string(), color_overlay);
 
     }
