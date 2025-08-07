@@ -14,7 +14,8 @@
 
 #include "Avatar.h"
 #include "AvatarOptimizer.h"
-#include "Sim3BA.h"   // your ORIGINAL OptimizeSim3Reprojection / OptimizePoseReprojection
+#include "Sim3BA.h"   
+#include "RenderSMPLMesh.h"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -85,6 +86,7 @@ static std::vector<PixelKP> load_mp_json(const std::string& path, int W, int H) 
     }
     return out;
 }
+
 
 // ---------------WRITES MESH OBJ-------------------
 static bool write_ply_ascii(const std::string& path,
@@ -272,7 +274,10 @@ int main(int argc, char** argv)
         
         // --- Render full 3D model and project on frame image after opt ---
         cv::Mat color_overlay = img.clone();
-        renderSMPLSilhouette( body_av.cloud, color_overlay, fx, fy, cx, cy);
+       // renderSMPLSilhouette( body_av.cloud, color_overlay, fx, fy, cx, cy);
+        smpl::render::renderSMPLMesh(body_av.cloud, faces, color_overlay, fx, fy, cx, cy,
+               /*fill=*/true, /*backface_cull=*/true, /*wireframe=*/false);
+
 
         // Save alongside PLY with a matching name and and 3D projection
         fs::path png_path = out_dir / (std::string("frame_") + std::to_string(i) + "_overlay.png");
