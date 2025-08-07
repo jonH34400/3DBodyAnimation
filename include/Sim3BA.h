@@ -4,6 +4,7 @@
 #include <Eigen/Core>
 #include <vector>
 #include <algorithm>
+#include "GaussianMixture.h"
 
 struct PixelKP { int jid; double u, v; };
 
@@ -245,13 +246,7 @@ struct PosePriorAAAnalytic : ceres::CostFunction {
     // GaussianMixture must expose:
     //  - VectorXd residual(const VectorXd&, int* compIdx)   // Mahalanobis residual stacked (3*N + 1)
     //  - std::vector<MatrixXd> prec_cho;                    // L s.t. Precision = L * L^T
-    struct GaussianMixture {
-        // Minimal interface placeholder; replace with your real type if available.
-        Eigen::VectorXd residual(const Eigen::VectorXd&, int* compIdx) const { *compIdx = 0; return Eigen::VectorXd(); }
-        std::vector<Eigen::MatrixXd> prec_cho;
-        bool valid = false;
-    };
-
+    using GaussianMixture = ark::GaussianMixture;
     PosePriorAAAnalytic(int nNonRootJoints, double beta_pose,
                         const GaussianMixture* gmm_prior = nullptr)
         : nJ_(nNonRootJoints),
@@ -259,7 +254,7 @@ struct PosePriorAAAnalytic : ceres::CostFunction {
           gmm_(gmm_prior) 
     {
         // Residuals: 3 per joint (+1 if using GMM for the mixture constant)
-        const int nRes = gmm_ && gmm_->valid ? (nJ_ * 3 + 1) : (nJ_ * 3);
+        const int nRes = (gmm_ && gmm_->nComps > 0) ? (nJ_ * 3 + 1): (nJ_ * 3);
         set_num_residuals(nRes);
         auto* sizes = mutable_parameter_block_sizes();
         for (int i = 0; i < nJ_; ++i) sizes->push_back(3); // angle-axis per non-root joint
@@ -268,8 +263,8 @@ struct PosePriorAAAnalytic : ceres::CostFunction {
     bool Evaluate(double const* const* parameters, double* residuals,
                   double** jacobians) const final
     {
-        const bool use_gmm = (gmm_ && gmm_->valid);
-        const int nRes = use_gmm ? (nJ_ * 3 + 1) : (nJ_ * 3);
+        const bool use_gmm = (gmm_ && gmm_->nComps > 0);
+        const int nRes = (gmm_ && gmm_->nComps > 0) ? (nJ_ * 3 + 1): (nJ_ * 3);
 
         // Stack AA into a single vector x \in R^{3*nJ}
         Eigen::VectorXd x(3 * nJ_);
