@@ -14,7 +14,8 @@
 
 #include "Avatar.h"
 #include "AvatarOptimizer.h"
-#include "Sim3BA.h"   // your ORIGINAL OptimizeSim3Reprojection / OptimizePoseReprojection
+#include "Sim3BA.h"   
+#include "RenderSMPLMesh.h"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -148,7 +149,6 @@ void overlay_avatar(const AvatarT& avatar, cv::Mat& img,
     }
 }
 
-// ---------- main ----------
 int main(int argc, char** argv)
 {
     if (argc < 5) {
@@ -160,6 +160,8 @@ int main(int argc, char** argv)
     const fs::path img_folder   = argv[3];
     const fs::path out_dir      = argv[4];
     const int max_iters         = (argc > 5) ? std::atoi(argv[5]) : 100;
+    const double beta_pose      = (argc > 6) ? std::atoi(argv[6]) : 20;
+    const double beta_shape     = (argc > 7) ? std::atoi(argv[7]) : 30;
 
     fs::create_directories(out_dir);
 
@@ -170,8 +172,8 @@ int main(int argc, char** argv)
     if (img0.empty()) { std::cerr << "Failed to read " << images.front() << "\n"; return 1; }
 
     const int W = img0.cols, H = img0.rows;
-    // Camera intrinsics (same heuristic you showed)
-    double fx = 0.9 * W;
+    double f = std::max(H, W);
+    double fx = 0.9 * f;
     double fy = fx;
     double cx = 0.5 * W;
     double cy = 0.5 * H;
@@ -209,55 +211,35 @@ int main(int argc, char** argv)
         body_av.p = Eigen::Vector3d(0,0,3.0);
         body_av.r.assign(nJ, Eigen::Matrix3d::Identity());
         Eigen::Matrix3d flipY = Eigen::Matrix3d::Identity(); flipY(1,1) = -1;
-        // Eigen::AngleAxisd yaw_pi(M_PI, Eigen::Vector3d::UnitY());
-        // body_av.r[0] = yaw_pi.toRotationMatrix() * flipY;
+        Eigen::AngleAxisd yaw_pi(M_PI, Eigen::Vector3d::UnitY());
+        body_av.r[0] = yaw_pi.toRotationMatrix() * flipY;
         body_av.update();
 
         // Sim3 init from joints
         std::vector<int> valid_joint_ids; valid_joint_ids.reserve(kps.size());
         for (const auto& kp : kps) valid_joint_ids.push_back(kp.jid);
 
-        Sim3Params sim3init{};
-        sim3init.scale() = 1.0;
-        sim3init.aa_root()[0] = 0.0; sim3init.aa_root()[1] = 0.0; sim3init.aa_root()[2] = 0.0;
-        sim3init.trans()[0] = body_av.p.x(); sim3init.trans()[1] = body_av.p.y(); sim3init.trans()[2] = body_av.p.z();
+        Sim3Params sim3_id{};
+        sim3_id.scale() = 1.0;
+        sim3_id.aa_root()[0] = sim3_id.aa_root()[1] = sim3_id.aa_root()[2] = 0.0;
+        sim3_id.trans()[0] = body_av.p.x();
+        sim3_id.trans()[1] = body_av.p.y();
+        sim3_id.trans()[2] = body_av.p.z();
 
-        auto [sim3sol, rep1] = OptimizeSim3Reprojection(
-            body_av.jointPos, kps, fx, fy, cx, cy, valid_joint_ids, &sim3init, max_iters
+        // Optimize pose and shape for this frame
+        auto [ok, report] = OptimizePoseReprojection(
+            model_av, body_av, kps, fx, fy, cx, cy, valid_joint_ids, sim3_id,
+            max_iters, /*betaPose=*/beta_pose, /*betaShape=*/beta_shape, /*gmmPosePrior=*/nullptr
         );
+        body_av.update();  // update avatar vertices and joints with optimized pose & shape
+        
+        cv::Mat color_overlay = img.clone();
+        smpl::render::renderSMPLMesh(body_av.cloud, faces, color_overlay, fx, fy, cx, cy,
+               /*fill=*/true, /*backface_cull=*/true, /*wireframe=*/false);
 
-        // Apply translation (scale stays separate for projection)
-        body_av.p = Eigen::Vector3d(sim3sol.trans()[0], sim3sol.trans()[1], sim3sol.trans()[2]);
-        body_av.update();
+        fs::path render2d = out_dir / (std::string("frame_") + std::to_string(i) + "_render.png");
+        cv::imwrite(render2d.string(), color_overlay);
 
-        // Full pose optimization
-        auto [ok, rep2] = OptimizePoseReprojection(
-            model_av, body_av, kps, fx, fy, cx, cy, valid_joint_ids, sim3sol, max_iters,
-            /*betaPose=*/3.0,   // tune
-            /*betaShape=*/0.05, // tune
-            /*gmmPosePrior=*/nullptr
-        );
-        body_av.update();
-
-        // Write PLY
-        char name[256]; std::snprintf(name, sizeof(name), "frame_%06zu.ply", i);
-        fs::path ply_path = out_dir / name;
-        if (!write_ply_ascii(ply_path.string(), body_av.cloud, faces)) {
-            std::cerr << "Failed to write " << ply_path << "\n";
-        } else {
-            std::cout << "Wrote " << ply_path << (ok ? "" : " (solver warning)") << "\n";
-        }
-
-        // --- overlay on the same frame image, after optimization ---
-        cv::Mat img_opt = img.clone();
-        const double* aa_root = nullptr;                  // no extra rotation; root pose already in body_av
-        overlay_avatar(body_av, img_opt, fx, fy, cx, cy,
-                    sim3sol.scale(), aa_root,          // use optimized Sim3 scale
-                    cv::Scalar(0,0,255), 2, BONES, (int)(sizeof(BONES)/sizeof(BONES[0])));
-
-        // Save alongside PLY with a matching name
-        fs::path png_path = out_dir / (std::string("frame_") + std::to_string(i) + "_overlay.png");
-        cv::imwrite(png_path.string(), img_opt);
     }
 
     std::cout << "Done.\n";
