@@ -122,4 +122,3 @@ make -j
     3.0                                     # [12] λ_temp (temporal smoothness weight)
 
 ```
-A successful build drops a `neutral_mesh.obj` T-pose.
