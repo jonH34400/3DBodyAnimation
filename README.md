@@ -1,5 +1,5 @@
 # Body Animation: SMPL Model Fitting from Video
-The code is available [here](https://github.com/jonH34400/3DBodyAnimation)
+The code is available [here](https://github.com/jonH34400/3DBodyAnimation).
 
 This [project](https://github.com/jonH34400/3DBodyAnimation) implements a C++ pipeline that takes an ordinary video of a person and outputs a new video with a visualized SMPL mesh overlaid per frame.
 
@@ -58,7 +58,7 @@ sudo apt install -y \
 
 
 
-### 3 Clone project & pull (Avatar)[https://github.com/sxyu/avatar/tree/master] sub-module
+### 3 Clone project & pull [Avatar](https://github.com/sxyu/avatar/tree/master) sub-module
 ```bash
 git clone --recursive https://github.com/jonH34400/3DBodyAnimation.git
 cd 3DBodyAnimation
