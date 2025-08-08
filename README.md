@@ -1,7 +1,7 @@
 # Body Animation: SMPL Model Fitting from Video
-The code is available (here)[https://github.com/jonH34400/3DBodyAnimation]
+The code is available [here](https://github.com/jonH34400/3DBodyAnimation)
 
-This (project)[https://github.com/jonH34400/3DBodyAnimation] implements a C++ pipeline that takes an ordinary video of a person and outputs a new video with a visualized SMPL mesh overlaid per frame.
+This [project](https://github.com/jonH34400/3DBodyAnimation) implements a C++ pipeline that takes an ordinary video of a person and outputs a new video with a visualized SMPL mesh overlaid per frame.
 
 The key component is an optimization loop using **Ceres Solver** to fit SMPL model parameters (pose, shape, and transformation) to 2D keypoints detected in each frame.
 
