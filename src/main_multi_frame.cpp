@@ -31,8 +31,8 @@ int main(int argc,char** argv)
     const int    skip         = (argc > 7)  ? std::atoi(argv[7])  : 10;  // anchor spacing
     const int    WSIZE        = (argc > 8)  ? std::atoi(argv[8])  : 20;  // window length
     const int    OVERLAP      = (argc > 9)  ? std::atoi(argv[9])  : 5;   // window overlap
-    const double betaPose     = (argc > 10) ? std::atof(argv[10]) : 5.0; // pose prior
-    const double betaShape    = (argc > 11) ? std::atof(argv[11]) : 25.0;// shape prior
+    const double betaPose     = (argc > 10) ? std::atof(argv[10]) : 20.0; // pose prior
+    const double betaShape    = (argc > 11) ? std::atof(argv[11]) : 30.0;// shape prior
     const double lambdaT      = (argc > 12) ? std::atof(argv[12]) : 3.0; // temporal
     fs::create_directories(out_dir);
 
@@ -103,34 +103,42 @@ int main(int argc,char** argv)
 
     std::vector<int> valid_ids(USE_SMPL.begin(), USE_SMPL.end());
 
-    /* ===========================================================
-       Stage-1 :  anchor frames (coarse global shape + pose)
-       =========================================================== */
+   /* ===========================================================
+   Stage-1 :  use the FIRST 20 frames for shape + pose
+   =========================================================== */
+    const int SHAPE_FRAMES = 20;
     std::vector<int> anchor_idx;
-    for (int i=0;i<(int)images.size(); i+=skip) anchor_idx.push_back(i);
+    {
+        const int nshape = std::min<int>(SHAPE_FRAMES, images.size());
+        anchor_idx.reserve(nshape);
+        for (int i = 0; i < nshape; ++i) anchor_idx.push_back(i);
+    }
 
     std::vector<ark::Avatar*>            anchorAv;
     std::vector<FramePoseParams>         anchorPos;
     std::vector<std::vector<PixelKP>>    kps_anchor;
+    anchorAv.reserve(anchor_idx.size());
+    anchorPos.reserve(anchor_idx.size());
+    kps_anchor.reserve(anchor_idx.size());
     for (int id : anchor_idx) {
         anchorAv.push_back(avatars[id]);
         anchorPos.push_back(poses[id]);
         kps_anchor.push_back(kps_all[id]);
     }
 
-    std::cout << "[INFO] stage-1  anchor frames = " << anchor_idx.size() << std::endl;
+    std::cout << "[INFO] stage-1  (first " << anchor_idx.size() << " frames) for SHAPE+POSE\n";
 
     auto t0a = std::chrono::steady_clock::now();
     auto [ok1, rep1] = OptimizeMultiFrame(
         model_av,
-        anchorAv,            // std::vector<ark::Avatar*>
-        kps_anchor,          // std::vector<std::vector<PixelKP>>
+        anchorAv,
+        kps_anchor,
         fx, fy, cx, cy,
-        valid_ids,           // const std::vector<int>&
-        anchorPos,           // std::vector<FramePoseParams>&
-        betaPose, betaShape, // pose/shape priors
-        lambdaT,             // temporal weight
-        max_iters_s1         // iterations
+        valid_ids,
+        anchorPos,
+        betaPose, betaShape,   // shape is optimized here
+        lambdaT,
+        max_iters_s1
     );
     auto t1a = std::chrono::steady_clock::now();
     double ms_anchor = std::chrono::duration<double,std::milli>(t1a - t0a).count();
@@ -138,6 +146,9 @@ int main(int argc,char** argv)
     std::cout << "[INFO] stage-1 done  (" << (ok1 ? "success" : "fail")
             << ")  in " << ms_anchor << " ms\n"
             << rep1 << std::endl;
+
+    /* share shape among all avatars */
+    for (auto* av : avatars) av->w = avatars.front()->w;
 
     // log anchor frames
     for (size_t k = 0; k < anchor_idx.size(); ++k) {
@@ -182,7 +193,7 @@ int main(int argc,char** argv)
             winPos,
             betaPose, betaShapeLock,
             lambdaT,
-            60
+            max_iters_s2
         );
         auto t1w = std::chrono::steady_clock::now();
         double ms_win = std::chrono::duration<double,std::milli>(t1w - t0w).count();

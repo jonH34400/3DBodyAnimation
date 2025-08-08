@@ -2,7 +2,7 @@
 
 This project implements a C++ pipeline that takes an ordinary video of a person and outputs a new video with a visualized SMPL mesh overlaid per frame.
 
-The key component is an optimization loop using **Ceres Solver** to fit SMPL model parameters (pose, shape, and translation) to 2D keypoints detected in each frame.
+The key component is an optimization loop using **Ceres Solver** to fit SMPL model parameters (pose, shape, and transformation) to 2D keypoints detected in each frame.
 
 ## Main Steps
 1. **Preprocessing (Python)**
@@ -57,26 +57,10 @@ sudo apt install -y \
 
 
 
-### 3  Install **libtorch** (C++ PyTorch)
-```bash
-mkdir -p ~/opt && cd ~/opt
-curl -L -o libtorch.zip \
-  "https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-without-deps-2.1.2%2Bcpu.zip"
-unzip libtorch.zip && rm libtorch.zip
-
-# make CMake find it automatically
-echo 'export Torch_DIR=$HOME/opt/libtorch' >> ~/.bashrc
-echo 'export CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH:$Torch_DIR' >> ~/.bashrc
-source ~/.bashrc   # reload variables in this shell
-```
-
-### 4  Clone project & pull sub-modules
-The repo already lists external dependencies in **.gitmodules** (`external/SMPLpp`, `external/xtensor`). One command fetches everything:
-
+### 3 Clone project & pull (Avatar)[https://github.com/sxyu/avatar/tree/master] sub-module
 ```bash
 git clone --recursive https://github.com/jonH34400/3DBodyAnimation.git
 cd 3DBodyAnimation
-git checkout NewModel3
 git submodule update --init --recursive
 ```
 
@@ -106,22 +90,36 @@ assets/raw/
 
 
 ### 3 Preprocess `.npz` to `.npz`
-   Run scripts/npz_fixer.py
+   Run scripts/npz_fixer.py and placce output model.npz into data/avatar-model/.
 
-
-## Preprocess model to `.json` (old)
-   ```bash
-   python scripts/convert_smplpp.py \
-     assets/raw/basicModel_f_lbs_10_207_0_v1.0.0.npz \
-     -o assets/models/SMPL_FEMALE.json
-   ```
 ---
 
 ## Build & run
 ```bash
 mkdir build && cd build
 cmake .. -DCeres_DIR="../external/install/ceres-1.14/lib/cmake/Ceres" -DCMAKE_BUILD_TYPE=Release -DWITH_OMP=ON
-make -j8
-./3dba ../data/avatar-model/ ../data/keypoints/video2/frame_0060.json ../data/frames_annotated/video2/frame_0060_annotated.png
+make -j
+./3dba_single \
+    ../data/avatar-model/              # [1] Path to SMPL.npz model file
+    ../data/keypoints/dancing_dude/    # [2] Folder with keypoint JSON files
+    ../data/frames_annotated/dancing_dude/  # [3] Folder with annotated input images
+    ../data/out/dancing_dude_sf_shape_gmm   # [4] Output folder for logs & renders
+    --use-gmm                           # [flag] Enable GMM pose prior
+    --opt-shape                         # [flag] Optimize body shape as well as pose
+
+./3dba_multi \
+    ../data/avatar-model/                   # [1] Path to SMPL.npz model file
+    ../data/keypoints/dancing_dude/         # [2] Folder with keypoint JSON files
+    ../data/frames_annotated/dancing_dude/  # [3] Folder with annotated input images
+    ../data/out/dancing_dude_mf_shape_gmm   # [4] Output folder for logs & renders
+    1000                                    # [5] max_iters for stage-1 (anchor frames)
+    500                                     # [6] max_iters for stage-2 (window refinement)
+    10                                      # [7] anchor_skip → spacing between anchor frames
+    20                                      # [8] window size for sliding-window optimization
+    5                                       # [9] window overlap
+    20.0                                    # [10] β_pose (pose prior weight)
+    30.0                                    # [11] β_shape (shape prior weight)
+    3.0                                     # [12] λ_temp (temporal smoothness weight)
+
 ```
 A successful build drops a `neutral_mesh.obj` T-pose.

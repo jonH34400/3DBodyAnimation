@@ -105,27 +105,61 @@ static std::vector<PixelKP> load_mp_json(const std::string& path, int W, int H) 
 int main(int argc, char** argv)
 {
     if (argc < 5) {
-        std::cout << "usage: 3dba <SMPL.npz> <kps_folder> <images_folder> <out_dir> [max_iters=100]\n";
+        std::cout <<
+        "usage: 3dba_single <SMPL.npz> <kps_folder> <images_folder> <out_dir>\n"
+        "                   [max_iters=100] [beta_pose=20] [beta_shape=30]\n"
+        "                   [--opt-shape] [--use-gmm]\n";
         return 0;
     }
-    const std::string smpl_path = argv[1];
-    const fs::path kps_folder   = argv[2];
-    const fs::path img_folder   = argv[3];
-    const fs::path out_dir      = argv[4];
-    const int max_iters         = (argc > 5) ? std::atoi(argv[5]) : 100;
-    const double beta_pose      = (argc > 6) ? std::atoi(argv[6]) : 20;
-    const double beta_shape     = (argc > 7) ? std::atoi(argv[7]) : 30;
-    bool opt_shape = false;
-    bool use_gmm = false;
 
-    for (int i = 8; i < argc; ++i) {
-        if (std::string(argv[i]) == "--opt-shape") {
-            opt_shape = true;
-            break;
-        } else if (std::string(argv[i]) == "--use-gmm"){     
-            use_gmm   = true;
+    const std::string smpl_path = argv[1];
+    const fs::path    kps_folder = argv[2];
+    const fs::path    img_folder = argv[3];
+    const fs::path    out_dir    = argv[4];
+
+    // defaults
+    int    max_iters  = 100;
+    double beta_pose  = 20.0;
+    double beta_shape = 30.0;
+    bool   opt_shape  = false;
+    bool   use_gmm    = false;
+
+    auto is_number = [](const std::string& s)->bool {
+        if (s.empty()) return false;
+        char* end = nullptr;
+        std::strtod(s.c_str(), &end);
+        return end && *end == '\0';
+    };
+
+    // consume up to 3 numeric optionals in order, plus any flags, from argv[5..]
+    int seen_numeric = 0;
+    for (int i = 5; i < argc; ++i) {
+        std::string a = argv[i];
+
+        if (a == "--opt-shape")      { opt_shape = true; continue; }
+        if (a == "--use-gmm")        { use_gmm   = true; continue; }
+
+        if (is_number(a)) {
+            switch (seen_numeric) {
+                case 0: max_iters  = std::max(1, std::atoi(a.c_str())); break;
+                case 1: beta_pose  = std::atof(a.c_str()); break;
+                case 2: beta_shape = std::atof(a.c_str()); break;
+                default: /* ignore extras */ break;
+            }
+            ++seen_numeric;
+            continue;
         }
+
+        // If you want, warn about unknown tokens:
+        std::cerr << "[WARN] Unknown arg ignored: " << a << "\n";
     }
+
+    std::cout << "[ARGS] max_iters=" << max_iters
+            << "  beta_pose=" << beta_pose
+            << "  beta_shape=" << beta_shape
+            << "  opt_shape=" << (opt_shape?"true":"false")
+            << "  use_gmm="   << (use_gmm?"true":"false") << std::endl;
+
     fs::create_directories(out_dir);
 
     // 1) Sample H/W and intrinsics from the first image in the directory
