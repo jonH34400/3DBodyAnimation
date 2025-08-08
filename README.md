@@ -1,6 +1,7 @@
 # Body Animation: SMPL Model Fitting from Video
+The code is available (here)[https://github.com/jonH34400/3DBodyAnimation]
 
-This project implements a C++ pipeline that takes an ordinary video of a person and outputs a new video with a visualized SMPL mesh overlaid per frame.
+This (project)[https://github.com/jonH34400/3DBodyAnimation] implements a C++ pipeline that takes an ordinary video of a person and outputs a new video with a visualized SMPL mesh overlaid per frame.
 
 The key component is an optimization loop using **Ceres Solver** to fit SMPL model parameters (pose, shape, and transformation) to 2D keypoints detected in each frame.
 
@@ -90,9 +91,9 @@ assets/raw/
 
 
 ### 3 Preprocess `.npz` to `.npz`
-   Run scripts/npz_fixer.py and placce output model.npz into data/avatar-model/.
+   Run `scripts/npz_fixer.py` and placce `output model.npz` into `data/avatar-model/`.
 ### 4 Video Data and Keypoint Detection
-   Download any video from YouTube and detect 2d keypoints with data/extract_key_kpoints_mediapipe.py
+   Download any video from YouTube and detect 2d keypoints with `data/extract_key_kpoints_mediapipe.py`
 ---
 
 ## Build & run
