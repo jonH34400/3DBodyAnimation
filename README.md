@@ -94,6 +94,7 @@ assets/raw/
    Run `scripts/npz_fixer.py` and placce `output model.npz` into `data/avatar-model/`.
 ### 4 Video Data and Keypoint Detection
    Download any video from YouTube and detect 2d keypoints with `data/extract_key_kpoints_mediapipe.py`
+
 ---
 
 ## Build & run
